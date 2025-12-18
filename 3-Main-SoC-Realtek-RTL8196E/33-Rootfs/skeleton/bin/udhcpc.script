@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# udhcpc.script — DHCP client hook script for eth0 interface
+# -----------------------------------------------------------------------------
+# This script is invoked by BusyBox's udhcpc during DHCP events (`bound`, `renew`,
+# `deconfig`). It configures the eth0 interface with the assigned IP, sets the
+# default route(s), and generates /etc/resolv.conf with the provided DNS servers.
+#
+# If no lease is obtained it falls back to IP 192.168.1.254 and adds a basic route.
+# A Google DNS server (8.8.8.8) is always appended as backup.
+#
+# Output is logged with emoji markers to align with the rest of the boot log.
+#
+# J. Nilo - May 2025
+#
+[ "$INIT_VERBOSE" = "0" ] && exec >/dev/null
+case "$1" in
+deconfig)
+    ifconfig "$interface" 0.0.0.0
+    echo "🌐 Interface $interface deconfigured, waiting for DHCP..."
+    ;;
+renew | bound)
+    ifconfig "$interface" "$ip" broadcast "$broadcast" netmask "$subnet"
+    echo "🌐 IP assigned to $interface: $ip"
+    echo "$ip" >/var/run/current_eth0_ip
+    if [ -n "$router" ]; then
+        echo "🔍 Checking existing default routes"
+        if route -n | grep -q "^0.0.0.0"; then
+            echo "🗑️  Removing existing default routes"
+            while route -n | grep -q "^0.0.0.0"; do
+                route del default 2>/dev/null
+            done
+        fi
+        for i in $router; do
+            echo "🛣️  Adding default route via $i"
+            route add default gw "$i" dev "$interface"
+        done
+    fi
+    ;;
+leasefail)
+    # Backup configuration in case of DHCP failure
+    echo "⚠️  DHCP failed after 3 attempts, falling back to IP 192.168.1.254"
+    ifconfig "$interface" 192.168.1.254
+    echo "192.168.1.254" >/var/run/current_eth0_ip
+
+    if ! route -n | grep -q "^0.0.0.0"; then
+        echo "🛣️  Adding fallback default route via 192.168.1.1"
+        route add -net default gw 192.168.1.1 dev "$interface"
+    fi
+    ;;
+esac
+exit 0

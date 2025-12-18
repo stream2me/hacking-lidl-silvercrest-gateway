@@ -1,0 +1,35 @@
+#!/bin/sh
+#
+# S60serialgateway — Init script to launch serialgateway
+#
+#
+# J. Nilo - Nov 2025
+#
+
+case "$1" in
+start)
+
+    echo "🚀 Starting serialgateway..."
+    serialgateway >/dev/null 2>&1 &
+    ;;
+
+stop)
+
+    echo "🛑 Stopping serialgateway..."
+    killall serialgateway 2>/dev/null
+    ;;
+
+restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+
+*)
+    echo "ℹ️ Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+
+exit 0
+

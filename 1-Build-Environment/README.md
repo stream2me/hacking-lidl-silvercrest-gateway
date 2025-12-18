@@ -1,0 +1,203 @@
+# Build Environment
+
+This directory contains the unified build environment for the Lidl/Silvercrest Gateway project. It provides all tools needed to build both:
+
+- **Main SoC (RTL8196E)** — Linux kernel, root filesystem, userdata
+- **Zigbee Radio (Silabs EFR32)** — NCP/RCP firmware
+
+## Choose Your Build Method
+
+| | Docker | Native Ubuntu |
+|---|---|---|
+| **Setup time** | ~45 min (one-time) | ~45 min (one-time) |
+| **Disk space** | ~8 GB (image) | ~4 GB (tools) |
+| **Best for** | Any OS, reproducible builds | Ubuntu 22.04, faster I/O |
+| **Windows** | Requires Docker Desktop | **Recommended:** WSL2 + native |
+
+> **Windows users:** WSL2 with Ubuntu 22.04 is the recommended approach. Native builds in WSL2 are simpler and faster than Docker Desktop.
+
+---
+
+## Option 1: Docker (Any OS)
+
+Build the Docker image once, then use it for all builds.
+
+### Build the Image
+
+```bash
+cd 1-Build-Environment
+docker build -t lidl-gateway-builder .
+```
+
+This takes ~45 minutes (downloads and compiles toolchains).
+
+### Use the Image
+
+```bash
+# Interactive shell
+docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder
+
+# Build Main SoC images
+docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder \
+    /workspace/3-Main-SoC-Realtek-RTL8196E/build_rtl8196e.sh
+
+# Build Zigbee firmware
+docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder \
+    /workspace/2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW/build.sh
+```
+
+### Docker Options Explained
+
+| Option | Description |
+|--------|-------------|
+| `-it` | Interactive mode with terminal |
+| `--rm` | Remove container after exit |
+| `-v $(pwd)/..:/workspace` | Mount project root to `/workspace` |
+
+The `-v` mount is bidirectional: built files appear in your local directories.
+
+---
+
+## Option 2: Native Build (Ubuntu 22.04)
+
+For native Ubuntu or WSL2 users.
+
+### Step 1: Install Dependencies
+
+```bash
+cd 1-Build-Environment
+sudo ./install_deps.sh
+```
+
+### Step 2: Build Lexra Toolchain (for RTL8196E)
+
+```bash
+cd 10-lexra-toolchain
+./build_toolchain.sh
+```
+
+This builds the MIPS cross-compiler for the RTL8196E (Lexra variant). Takes ~30 minutes.
+
+After building, add to your PATH:
+```bash
+export PATH="$HOME/x-tools/mips-lexra-linux-musl/bin:$PATH"
+```
+
+### Step 3: Build Realtek Tools
+
+```bash
+cd 11-realtek-tools
+./build_tools.sh
+```
+
+This builds `cvimg`, `lzma`, and the lzma-loader.
+
+### Step 4: Install Silabs Tools (for EFR32)
+
+```bash
+cd 12-silabs-toolchain
+./install_silabs.sh
+```
+
+This downloads and installs:
+- slc-cli (Simplicity Commander CLI)
+- Gecko SDK 4.4.0
+- ARM GCC toolchain
+
+After installation, source the environment:
+```bash
+source ~/silabs/env.sh
+```
+
+---
+
+## Directory Structure
+
+```
+1-Build-Environment/
+├── Dockerfile              # Docker image definition
+├── install_deps.sh         # Ubuntu package installation
+├── README.md               # This file
+│
+├── 10-lexra-toolchain/     # Lexra MIPS toolchain
+│   ├── build_toolchain.sh  # Build script
+│   ├── crosstool-ng.config # Crosstool-ng configuration
+│   └── patches/            # GCC/binutils patches for Lexra
+│
+├── 11-realtek-tools/       # Realtek image tools
+│   ├── build_tools.sh      # Build script
+│   ├── cvimg/              # cvimg source
+│   ├── lzma-4.65/          # LZMA compressor
+│   └── lzma-loader/        # LZMA decompression loader
+│
+└── 12-silabs-toolchain/    # Silicon Labs tools
+    └── install_silabs.sh   # Download and install slc-cli + SDK
+```
+
+---
+
+## Toolchains Reference
+
+### Lexra MIPS Toolchain
+
+| Item | Value |
+|------|-------|
+| Target | `mips-lexra-linux-musl` |
+| GCC | 8.5.0 |
+| C library | musl 1.2.5 |
+| Location | `~/x-tools/mips-lexra-linux-musl/` |
+
+The Lexra architecture is a MIPS variant without unaligned access instructions (`lwl`, `lwr`, `swl`, `swr`). Standard MIPS toolchains won't work.
+
+### Silabs ARM Toolchain
+
+| Item | Value |
+|------|-------|
+| Target | `arm-none-eabi` |
+| GCC | 12.2 |
+| SDK | Gecko SDK 4.4.0 |
+| CLI | slc-cli 5.9.3.0 |
+
+### Realtek Tools
+
+| Tool | Description |
+|------|-------------|
+| `cvimg` | Create Realtek flash images |
+| `lzma` | LZMA compressor |
+| `lzma-loader` | Boot-time LZMA decompressor |
+
+---
+
+## Troubleshooting
+
+### Docker build fails
+
+If the toolchain build fails with network errors, retry:
+```bash
+docker build --no-cache -t lidl-gateway-builder .
+```
+
+### slc-cli download fails
+
+The Silabs download may require login. If wget fails, manually download from:
+https://www.silabs.com/developers/simplicity-studio
+
+### PATH not set
+
+Add these to `~/.bashrc`:
+```bash
+# Lexra toolchain
+export PATH="$HOME/x-tools/mips-lexra-linux-musl/bin:$PATH"
+
+# Silabs tools
+source ~/silabs/env.sh
+```
+
+---
+
+## Next Steps
+
+After setting up the build environment:
+
+1. **Build Main SoC images:** See [3-Main-SoC-Realtek-RTL8196E](../3-Main-SoC-Realtek-RTL8196E/)
+2. **Build Zigbee firmware:** See [2-Zigbee-Radio-Silabs-EFR32](../2-Zigbee-Radio-Silabs-EFR32/)
