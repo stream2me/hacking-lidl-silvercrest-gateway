@@ -35,10 +35,13 @@ else
 fi
 
 # Write /var/hosts (symlinked from /etc/hosts to avoid jffs2 writes)
+# but only if not using dhcp
+if [ -f /userdata/etc/eth0.conf ]; then
 cat >/var/hosts <<EOF
 127.0.0.1         localhost
 $CURRENT_IP       $HOSTNAME
 EOF
+fi
 
 # Write /var/resolv.conf (symlinked from /etc/resolv.conf to avoid jffs2 writes)
 cat >/var/resolv.conf <<EOF
