@@ -55,11 +55,11 @@ if [ -d "$TOOLCHAIN_PREFIX" ]; then
     rm -rf "$TOOLCHAIN_PREFIX"
 fi
 
-# Deploy Lexra patch to crosstool-ng patches directory
-echo "📦 Deploying Lexra patch to ~/.crosstool-ng/patches/musl/1.2.5/..."
-mkdir -p ~/.crosstool-ng/patches/musl/1.2.5
-cp -f "${SCRIPT_DIR}/patches/musl-1.2.5/910-lexra.patch" ~/.crosstool-ng/patches/musl/1.2.5/
-echo "✅ Patch deployed"
+# Deploy Lexra patches to crosstool-ng patches directory
+echo "📦 Deploying Lexra patches to ~/.crosstool-ng/..."
+mkdir -p ~/.crosstool-ng/
+cp -f -a "${SCRIPT_DIR}/patches" ~/.crosstool-ng/
+echo "✅ Patches deployed"
 echo ""
 
 # Create temporary build directory
