@@ -199,8 +199,8 @@ COPY --chown=builder:builder 11-realtek-tools /home/builder/realtek-tools
 RUN cd /home/builder/realtek-tools && \
     mkdir -p bin && \
     cd cvimg && make && cp cvimg ../bin/ && cd .. && \
-    cd lzma-4.65/CPP/7zip/Compress/LZMA_Alone && make -f makefile.gcc && cp lzma /home/builder/realtek-tools/bin/ && cd /home/builder/realtek-tools && \
-    cd lzma-loader && make && cd ..
+    cd lzma-4.65/CPP/7zip/Compress/LZMA_Alone && make -f makefile.gcc && cp lzma /home/builder/realtek-tools/bin/
+# Note: lzma-loader is built during kernel compilation (requires kernel headers)
 
 ENV PATH="/home/builder/realtek-tools/bin:${PATH}"
 
