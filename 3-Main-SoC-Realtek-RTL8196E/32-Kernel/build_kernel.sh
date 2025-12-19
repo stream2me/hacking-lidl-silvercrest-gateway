@@ -65,11 +65,36 @@ export PATH="${TOOLCHAIN_DIR}/bin:$PATH"
 export ARCH=mips
 export CROSS_COMPILE=mips-lexra-linux-musl-
 
-# Tools (from 1-Build-Environment)
+# Tools - check multiple locations (workspace mount or Docker image paths)
 BUILD_ENV="${PROJECT_ROOT}/../1-Build-Environment/11-realtek-tools"
-CVIMG="${BUILD_ENV}/bin/cvimg"
-LZMA="${BUILD_ENV}/bin/lzma"
-LOADER_DIR="${BUILD_ENV}/lzma-loader"
+DOCKER_TOOLS="/home/builder/realtek-tools"
+
+# Find cvimg
+if [ -x "${BUILD_ENV}/bin/cvimg" ]; then
+    CVIMG="${BUILD_ENV}/bin/cvimg"
+elif [ -x "${DOCKER_TOOLS}/bin/cvimg" ]; then
+    CVIMG="${DOCKER_TOOLS}/bin/cvimg"
+else
+    CVIMG=""
+fi
+
+# Find lzma (must use LZMA SDK, not system xz-utils - different syntax)
+if [ -x "${BUILD_ENV}/bin/lzma" ]; then
+    LZMA="${BUILD_ENV}/bin/lzma"
+elif [ -x "${DOCKER_TOOLS}/bin/lzma" ]; then
+    LZMA="${DOCKER_TOOLS}/bin/lzma"
+else
+    LZMA=""
+fi
+
+# Find lzma-loader directory
+if [ -d "${BUILD_ENV}/lzma-loader" ]; then
+    LOADER_DIR="${BUILD_ENV}/lzma-loader"
+elif [ -d "${DOCKER_TOOLS}/lzma-loader" ]; then
+    LOADER_DIR="${DOCKER_TOOLS}/lzma-loader"
+else
+    LOADER_DIR=""
+fi
 
 # RTL bootloader settings
 CVIMG_START_ADDR="0x80c00000"
@@ -102,14 +127,25 @@ echo -e "${GREEN}✅ Toolchain found: $(${CROSS_COMPILE}gcc --version | head -1)
 echo ""
 
 # Check tools
-if [ ! -x "$CVIMG" ] || [ ! -x "$LZMA" ]; then
+if [ -z "$CVIMG" ] || [ -z "$LZMA" ] || [ -z "$LOADER_DIR" ]; then
     echo -e "${RED}❌ Realtek tools not found${NC}"
+    echo ""
+    echo "Missing tools:"
+    [ -z "$CVIMG" ] && echo "  - cvimg"
+    [ -z "$LZMA" ] && echo "  - lzma (LZMA SDK)"
+    [ -z "$LOADER_DIR" ] && echo "  - lzma-loader"
     echo ""
     echo "Build realtek-tools first:"
     echo "  cd ../../1-Build-Environment/11-realtek-tools && ./build_tools.sh"
     echo ""
     exit 1
 fi
+
+echo "Tools found:"
+echo "  • cvimg: $CVIMG"
+echo "  • lzma: $LZMA"
+echo "  • lzma-loader: $LOADER_DIR"
+echo ""
 
 # Handle clean option
 if [ "$DO_CLEAN" = true ]; then
