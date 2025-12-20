@@ -35,16 +35,18 @@ The gateway contains **two independent processors**:
 
 ### 1. Set Up the Build Environment
 
+Clone the repository anywhere:
 ```bash
-# Clone anywhere, rename if you want
 git clone https://github.com/jnilo1/hacking-lidl-silvercrest-gateway.git
-cd hacking-lidl-silvercrest-gateway/1-Build-Environment
-
-# Install everything (dependencies + toolchain) — takes ~45 min
-sudo ./install_deps.sh
+cd hacking-lidl-silvercrest-gateway
 ```
 
-The toolchain is installed inside the project: `x-tools/mips-lexra-linux-musl/`
+Two options (see [1-Build-Environment](./1-Build-Environment/) for details):
+
+| Approach | Command |
+|----------|---------|
+| **Ubuntu/WSL2** | `cd 1-Build-Environment && sudo ./install_deps.sh` |
+| **Docker** | `docker build -t lidl-gateway 1-Build-Environment` |
 
 ### 2. Flash the Linux System (RTL8196E)
 

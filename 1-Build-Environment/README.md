@@ -81,12 +81,7 @@ This single command:
 
 The toolchain is installed to: `<project>/x-tools/mips-lexra-linux-musl/`
 
-### After Installation
-
-Add the toolchain to your PATH:
-```bash
-export PATH="$(pwd)/../x-tools/mips-lexra-linux-musl/bin:$PATH"
-```
+All build scripts auto-detect the toolchain location — no PATH configuration needed.
 
 ### Additional Tools
 
@@ -189,16 +184,14 @@ docker build --no-cache -t lidl-gateway-builder .
 The Silabs download may require login. If wget fails, manually download from:
 https://www.silabs.com/developers/simplicity-studio
 
-### PATH not set
+### Silabs PATH not set
 
-Add these to `~/.bashrc` (adjust path to your project location):
+Add this to `~/.bashrc`:
 ```bash
-# Lexra toolchain (adjust path to your project)
-export PATH="/path/to/project/x-tools/mips-lexra-linux-musl/bin:$PATH"
-
-# Silabs tools
 source ~/silabs/env.sh
 ```
+
+Note: The Lexra toolchain PATH is auto-detected by all build scripts.
 
 ---
 
