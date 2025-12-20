@@ -64,6 +64,7 @@ RUN dpkg --add-architecture i386 && \
         libssl-dev \
         libelf-dev \
         device-tree-compiler \
+        pkg-config \
         # Filesystem tools
         cpio \
         squashfs-tools \
@@ -205,7 +206,7 @@ RUN cd /home/builder/realtek-tools && \
 ENV PATH="/home/builder/realtek-tools/bin:${PATH}"
 
 # ============================================================================
-# Step 10: Setup environment
+# Step 10: Setup environment and entrypoint
 # ============================================================================
 RUN echo '' >> ~/.bashrc && \
     echo '# Lidl Gateway Build Environment' >> ~/.bashrc && \
@@ -219,4 +220,8 @@ RUN echo '' >> ~/.bashrc && \
 
 WORKDIR /workspace
 
+# Entrypoint creates symlinks for consistent paths with native builds:
+#   /workspace/x-tools -> /home/builder/x-tools
+#   /workspace/1-Build-Environment/11-realtek-tools/bin -> /home/builder/realtek-tools/bin
+ENTRYPOINT ["/bin/bash", "-c", "[ ! -e /workspace/x-tools ] && ln -s /home/builder/x-tools /workspace/x-tools 2>/dev/null || true; [ -d /workspace/1-Build-Environment/11-realtek-tools ] && [ ! -e /workspace/1-Build-Environment/11-realtek-tools/bin ] && ln -s /home/builder/realtek-tools/bin /workspace/1-Build-Environment/11-realtek-tools/bin 2>/dev/null || true; exec \"$@\"", "--"]
 CMD ["/bin/bash"]

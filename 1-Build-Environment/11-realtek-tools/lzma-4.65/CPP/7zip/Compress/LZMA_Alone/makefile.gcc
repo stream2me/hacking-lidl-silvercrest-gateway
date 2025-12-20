@@ -1,6 +1,8 @@
 PROG = lzma
-CXX = g++ -O2 -Wall
-CXX_C = gcc -O2 -Wall
+# Suppress warnings from legacy LZMA SDK 4.65 code
+WARN_FLAGS = -Wno-misleading-indentation -Wno-format-security -Wno-unused-but-set-variable -Wno-dangling-pointer
+CXX = g++ -O2 -Wall $(WARN_FLAGS)
+CXX_C = gcc -O2 -Wall $(WARN_FLAGS)
 LIB = -lm
 RM = rm -f
 CFLAGS = -c

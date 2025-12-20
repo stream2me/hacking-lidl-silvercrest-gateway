@@ -77,6 +77,7 @@ apt-get install -y \
     tftp-hpa \
     device-tree-compiler \
     rsync \
+    pkg-config \
     openjdk-21-jre-headless \
     libgl1
 
@@ -144,17 +145,27 @@ sudo -u "$REAL_USER" \
 
 echo ""
 echo "========================================="
+echo "  BUILDING REALTEK TOOLS"
+echo "========================================="
+echo ""
+
+# Build realtek-tools (cvimg, lzma)
+cd "${SCRIPT_DIR}/11-realtek-tools"
+sudo -u "$REAL_USER" \
+    PATH="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl/bin:$PATH" \
+    PROJECT_ROOT="${PROJECT_ROOT}" \
+    ./build_tools.sh
+
+echo ""
+echo "========================================="
 echo "  SETUP COMPLETE"
 echo "========================================="
 echo ""
-echo "Next steps:"
+echo "All tools are ready. You can now build the firmware:"
 echo ""
-echo "  1. Add toolchain to your PATH:"
-echo "     export PATH=\"${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl/bin:\$PATH\""
+echo "  cd ${PROJECT_ROOT}/3-Main-SoC-Realtek-RTL8196E"
+echo "  ./build_rtl8196e.sh"
 echo ""
-echo "  2. Build Realtek tools:"
-echo "     cd 11-realtek-tools && ./build_tools.sh"
-echo ""
-echo "  3. Install Silabs tools:"
-echo "     cd 12-silabs-toolchain && ./install_silabs.sh"
+echo "Optional - Install Silabs tools (for Zigbee firmware):"
+echo "  cd ${SCRIPT_DIR}/12-silabs-toolchain && ./install_silabs.sh"
 echo ""

@@ -48,15 +48,8 @@ echo ""
 # Check if toolchain already exists
 if [ -d "$TOOLCHAIN_PREFIX" ]; then
     echo "Toolchain already exists at: $TOOLCHAIN_PREFIX"
-    echo ""
-    read -p "Rebuild? This will take ~30 minutes. [y/N] " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Cancelled."
-        exit 0
-    fi
-    echo "Removing existing toolchain..."
-    rm -rf "$TOOLCHAIN_PREFIX"
+    echo "Skipping build."
+    exit 0
 fi
 
 # Deploy Lexra patches to crosstool-ng patches directory
@@ -93,13 +86,6 @@ echo "========================================="
 ct-ng show-config 2>/dev/null | grep -E "(Target|Vendor|OS|Kernel|C library|GCC|Binutils)" || true
 echo "========================================="
 echo ""
-
-read -p "Start build? This will take ~30 minutes. [Y/n] " -n 1 -r
-echo ""
-if [[ $REPLY =~ ^[Nn]$ ]]; then
-    echo "Cancelled."
-    exit 0
-fi
 
 # Build toolchain
 echo ""
