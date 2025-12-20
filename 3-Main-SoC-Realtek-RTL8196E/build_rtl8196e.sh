@@ -21,6 +21,13 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TOOLCHAIN_DIR="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl"
+
+# Add toolchain to PATH if it exists in project directory
+if [ -d "${TOOLCHAIN_DIR}/bin" ]; then
+    export PATH="${TOOLCHAIN_DIR}/bin:$PATH"
+fi
 
 # Parse arguments
 BUILD_KERNEL=0
@@ -81,13 +88,12 @@ echo ""
 
 # Check toolchain
 if ! command -v mips-lexra-linux-musl-gcc >/dev/null 2>&1; then
-    echo "❌ Lexra toolchain not found in PATH"
+    echo "ERROR: Lexra toolchain not found"
     echo ""
-    echo "Add toolchain to PATH:"
-    echo "  export PATH=\"\$HOME/x-tools/mips-lexra-linux-musl/bin:\$PATH\""
+    echo "Build it first:"
+    echo "  cd ../1-Build-Environment && sudo ./install_deps.sh"
     echo ""
-    echo "Or build it first:"
-    echo "  cd ../1-Build-Environment/10-lexra-toolchain && ./build_toolchain.sh"
+    echo "Expected location: ${TOOLCHAIN_DIR}"
     exit 1
 fi
 

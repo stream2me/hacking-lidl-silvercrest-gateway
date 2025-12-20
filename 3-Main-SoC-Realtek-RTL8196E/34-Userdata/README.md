@@ -200,7 +200,8 @@ Cross-compiling applications for the gateway is straightforward. Use the existin
 
 1. **Cross-compile** your application using the toolchain:
    ```bash
-   export PATH="$HOME/x-tools/mips-lexra-linux-musl/bin:$PATH"
+   # From project root:
+   export PATH="$(pwd)/x-tools/mips-lexra-linux-musl/bin:$PATH"
    export CC=mips-lexra-linux-musl-gcc
    ./configure --host=mips-linux
    make

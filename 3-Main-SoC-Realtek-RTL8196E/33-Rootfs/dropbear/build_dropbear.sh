@@ -14,6 +14,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOTFS_PART="${SCRIPT_DIR}/.."
+# Project root is 4 levels up: dropbear -> 33-Rootfs -> 3-Main-SoC -> project root
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 # Parse version argument
 VERSION="${1:-2025.88}"
@@ -30,8 +32,8 @@ if [ ! -d "$SOURCE_DIR" ]; then
 fi
 
 # Toolchain
-TOOLCHAIN_DIR=$HOME/x-tools/mips-lexra-linux-musl
-export PATH="$TOOLCHAIN_DIR/bin:$PATH"
+TOOLCHAIN_DIR="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl"
+export PATH="${TOOLCHAIN_DIR}/bin:$PATH"
 export CROSS_COMPILE="mips-lexra-linux-musl-"
 export CC="${CROSS_COMPILE}gcc"
 export AR="${CROSS_COMPILE}ar"

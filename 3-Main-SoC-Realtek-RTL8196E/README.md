@@ -198,8 +198,9 @@ docker run -it --rm -v $(pwd):/workspace lidl-gateway-builder
 ### Build Natively (Ubuntu 22.04 / WSL2)
 
 ```bash
-# Ensure toolchain is in PATH
-export PATH="$HOME/x-tools/mips-lexra-linux-musl/bin:$PATH"
+# The build scripts auto-detect the toolchain in the project directory
+# Or set it manually:
+# export PATH="<project>/x-tools/mips-lexra-linux-musl/bin:$PATH"
 
 # Build rootfs components
 ./33-Rootfs/busybox/build_busybox.sh

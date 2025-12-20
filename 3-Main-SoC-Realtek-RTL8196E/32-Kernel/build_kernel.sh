@@ -23,7 +23,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}/.."
+# Project root is 3 levels up: 32-Kernel -> 3-Main-SoC -> project root
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Parse command line options
 DO_CLEAN=false
@@ -60,13 +61,13 @@ KERNEL_DIR="linux-${KERNEL_VERSION}-rtl8196e"
 KERNEL_CMDLINE="console=ttyS0,115200"
 
 # Toolchain
-TOOLCHAIN_DIR=$HOME/x-tools/mips-lexra-linux-musl
+TOOLCHAIN_DIR="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl"
 export PATH="${TOOLCHAIN_DIR}/bin:$PATH"
 export ARCH=mips
 export CROSS_COMPILE=mips-lexra-linux-musl-
 
 # Tools - check multiple locations (workspace mount or Docker image paths)
-BUILD_ENV="${PROJECT_ROOT}/../1-Build-Environment/11-realtek-tools"
+BUILD_ENV="${PROJECT_ROOT}/1-Build-Environment/11-realtek-tools"
 DOCKER_TOOLS="/home/builder/realtek-tools"
 
 # Find cvimg

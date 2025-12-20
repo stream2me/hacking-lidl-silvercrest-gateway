@@ -5,7 +5,7 @@
 #   ./clean_part1.sh                  # Clean all (default)
 #   ./clean_part1.sh all              # Clean all
 #   ./clean_part1.sh tools            # Clean realtek-tools only
-#   ./clean_part1.sh toolchain        # Clean lexra toolchain (~/x-tools)
+#   ./clean_part1.sh toolchain        # Clean lexra toolchain (<project>/x-tools)
 #   ./clean_part1.sh tools toolchain  # Clean both
 #
 # This script removes:
@@ -23,7 +23,9 @@
 
 set -e
 
-PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Project root is 1 level up: 1-Build-Environment -> project root
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Default values
 CLEAN_TOOLS=0
@@ -88,26 +90,26 @@ if [ $CLEAN_TOOLS -eq 1 ]; then
     echo "Cleaning realtek-tools..."
 
     # Remove compiled binaries
-    rm -rf "${PROJECT_ROOT}/11-realtek-tools/bin"
+    rm -rf "${SCRIPT_DIR}/11-realtek-tools/bin"
 
     # Remove downloaded mtd-utils
-    rm -rf "${PROJECT_ROOT}/11-realtek-tools/mtd-utils"
+    rm -rf "${SCRIPT_DIR}/11-realtek-tools/mtd-utils"
 
     # Clean cvimg build artifacts
-    if [ -d "${PROJECT_ROOT}/11-realtek-tools/cvimg" ]; then
-        cd "${PROJECT_ROOT}/11-realtek-tools/cvimg"
+    if [ -d "${SCRIPT_DIR}/11-realtek-tools/cvimg" ]; then
+        cd "${SCRIPT_DIR}/11-realtek-tools/cvimg"
         make clean 2>/dev/null || true
     fi
 
     # Clean lzma build artifacts
-    if [ -d "${PROJECT_ROOT}/11-realtek-tools/lzma-4.65/CPP/7zip/Compress/LZMA_Alone" ]; then
-        cd "${PROJECT_ROOT}/11-realtek-tools/lzma-4.65/CPP/7zip/Compress/LZMA_Alone"
+    if [ -d "${SCRIPT_DIR}/11-realtek-tools/lzma-4.65/CPP/7zip/Compress/LZMA_Alone" ]; then
+        cd "${SCRIPT_DIR}/11-realtek-tools/lzma-4.65/CPP/7zip/Compress/LZMA_Alone"
         make -f makefile.gcc clean 2>/dev/null || true
     fi
 
     # Clean lzma-loader build artifacts
-    if [ -d "${PROJECT_ROOT}/11-realtek-tools/lzma-loader" ]; then
-        cd "${PROJECT_ROOT}/11-realtek-tools/lzma-loader"
+    if [ -d "${SCRIPT_DIR}/11-realtek-tools/lzma-loader" ]; then
+        cd "${SCRIPT_DIR}/11-realtek-tools/lzma-loader"
         make clean 2>/dev/null || true
     fi
 
@@ -118,7 +120,7 @@ fi
 # Clean lexra toolchain
 # =========================================
 if [ $CLEAN_TOOLCHAIN -eq 1 ]; then
-    TOOLCHAIN_PATH="$HOME/x-tools/mips-lexra-linux-musl"
+    TOOLCHAIN_PATH="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl"
 
     if [ -d "$TOOLCHAIN_PATH" ]; then
         echo "Cleaning lexra toolchain..."
@@ -136,7 +138,7 @@ if [ $CLEAN_TOOLCHAIN -eq 1 ]; then
     fi
 fi
 
-cd "${PROJECT_ROOT}"
+cd "${SCRIPT_DIR}"
 
 echo ""
 echo "========================================="

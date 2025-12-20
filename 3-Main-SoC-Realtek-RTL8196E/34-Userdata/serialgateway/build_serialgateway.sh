@@ -22,6 +22,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 USERDATA_PART="${SCRIPT_DIR}/.."
+# Project root is 4 levels up: serialgateway -> 34-Userdata -> 3-Main-SoC -> project root
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 SOURCE_DIR="${SCRIPT_DIR}/src"
 INSTALL_DIR="${USERDATA_PART}/skeleton/usr/bin"
@@ -37,8 +39,8 @@ if [ ! -f "${SOURCE_DIR}/main.c" ]; then
 fi
 
 # Lexra toolchain (musl 1.2.5)
-TOOLCHAIN_DIR=$HOME/x-tools/mips-lexra-linux-musl
-export PATH="$TOOLCHAIN_DIR/bin:$PATH"
+TOOLCHAIN_DIR="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl"
+export PATH="${TOOLCHAIN_DIR}/bin:$PATH"
 export CROSS_COMPILE="mips-lexra-linux-musl-"
 
 # Compiler settings

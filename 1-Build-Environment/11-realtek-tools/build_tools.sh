@@ -11,13 +11,15 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Project root is 2 levels up: 11-realtek-tools -> 1-Build-Environment -> project root
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 BIN_DIR="${SCRIPT_DIR}/bin"
 MTD_UTILS_DIR="${SCRIPT_DIR}/mtd-utils"
 MTD_UTILS_VERSION="2.2.0"
 MTD_UTILS_URL="https://github.com/sigma-star/mtd-utils/archive/refs/tags/v${MTD_UTILS_VERSION}.tar.gz"
 
 # Lexra toolchain configuration
-TOOLCHAIN_PREFIX="$HOME/x-tools/mips-lexra-linux-musl"
+TOOLCHAIN_PREFIX="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl"
 CROSS_COMPILE="mips-lexra-linux-musl-"
 
 echo "========================================="

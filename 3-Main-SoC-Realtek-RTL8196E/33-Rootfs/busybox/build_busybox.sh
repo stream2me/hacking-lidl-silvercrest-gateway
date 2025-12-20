@@ -28,6 +28,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOTFS_PART="${SCRIPT_DIR}/.."
+# Project root is 4 levels up: busybox -> 33-Rootfs -> 3-Main-SoC -> project root
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 # Parse arguments
 if [ "$1" = "menuconfig" ]; then
@@ -55,7 +57,7 @@ PATCH_MARKER="${SRC_DIR}/.patches_applied"
 echo "📦 BusyBox version: ${BB_VER}"
 
 # Toolchain
-TOOLCHAIN_DIR=$HOME/x-tools/mips-lexra-linux-musl
+TOOLCHAIN_DIR="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl"
 export PATH="${TOOLCHAIN_DIR}/bin:$PATH"
 CROSS_COMPILE=mips-lexra-linux-musl-
 
