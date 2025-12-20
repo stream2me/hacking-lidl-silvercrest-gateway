@@ -1,21 +1,25 @@
 #!/bin/bash
-# install_deps.sh — Install all dependencies for building the gateway system
+# install_deps.sh — Install all dependencies and build the Lexra toolchain
 #
-# This script installs all required packages for:
-#   - Lexra MIPS toolchain (crosstool-ng) for RTL8196E
-#   - Realtek tools (cvimg, lzma, lzma-loader)
-#   - Linux kernel, BusyBox, Dropbear, etc.
-#   - Silicon Labs slc-cli and Gecko SDK for EFR32
+# This script:
+#   1. Installs all required packages
+#   2. Builds and installs crosstool-ng (in /tmp, temporary)
+#   3. Launches the toolchain build automatically
 #
-# Tested on: Ubuntu 22.04 LTS
+# Tested on: Ubuntu 22.04 LTS, WSL2
 #
 # J. Nilo - December 2025
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
 echo "========================================="
 echo "  INSTALL BUILD DEPENDENCIES"
 echo "========================================="
+echo ""
+echo "Project root: ${PROJECT_ROOT}"
 echo ""
 
 # Check if running as root or with sudo
@@ -24,6 +28,13 @@ if [ "$EUID" -ne 0 ]; then
     echo "   sudo ./install_deps.sh"
     exit 1
 fi
+
+# Get the real user (not root)
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+echo "Installing for user: ${REAL_USER}"
+echo ""
 
 echo "Adding i386 architecture (for some legacy tools)..."
 dpkg --add-architecture i386
@@ -71,6 +82,35 @@ apt-get install -y \
 
 echo ""
 echo "========================================="
+echo "  BUILDING CROSSTOOL-NG"
+echo "========================================="
+echo ""
+
+CT_NG_VERSION="crosstool-ng-1.26.0"
+CT_NG_URL="http://crosstool-ng.org/download/crosstool-ng/${CT_NG_VERSION}.tar.bz2"
+CT_NG_INSTALL_DIR="/tmp/crosstool-ng-install"
+
+# Build crosstool-ng in /tmp (as regular user)
+cd /tmp
+if [ ! -f "${CT_NG_VERSION}.tar.bz2" ]; then
+    echo "Downloading crosstool-ng..."
+    sudo -u "$REAL_USER" wget -q "${CT_NG_URL}"
+fi
+
+echo "Extracting crosstool-ng..."
+sudo -u "$REAL_USER" rm -rf "${CT_NG_VERSION}"
+sudo -u "$REAL_USER" tar xjf "${CT_NG_VERSION}.tar.bz2"
+
+echo "Building crosstool-ng..."
+cd "${CT_NG_VERSION}"
+sudo -u "$REAL_USER" ./configure --prefix="${CT_NG_INSTALL_DIR}" >/dev/null
+sudo -u "$REAL_USER" make -j$(nproc) >/dev/null 2>&1
+sudo -u "$REAL_USER" make install >/dev/null
+
+echo "crosstool-ng installed to ${CT_NG_INSTALL_DIR}"
+echo ""
+
+echo "========================================="
 echo "  ALL DEPENDENCIES INSTALLED"
 echo "========================================="
 echo ""
@@ -85,16 +125,36 @@ echo "  - Flashing: tftp-hpa"
 echo "  - Silabs tools: openjdk-21-jre-headless, libgl1"
 echo "  - Other: git, git-lfs, wget, curl, unzip, python3, rsync"
 echo ""
+
+echo "========================================="
+echo "  BUILDING LEXRA TOOLCHAIN"
+echo "========================================="
+echo ""
+
+# Export variables for build_toolchain.sh
+export PATH="${CT_NG_INSTALL_DIR}/bin:$PATH"
+export PROJECT_ROOT
+
+# Run build_toolchain.sh as the real user
+cd "${SCRIPT_DIR}/10-lexra-toolchain"
+sudo -u "$REAL_USER" \
+    PATH="${CT_NG_INSTALL_DIR}/bin:$PATH" \
+    PROJECT_ROOT="${PROJECT_ROOT}" \
+    ./build_toolchain.sh
+
+echo ""
+echo "========================================="
+echo "  SETUP COMPLETE"
+echo "========================================="
+echo ""
 echo "Next steps:"
 echo ""
-echo "  1. Build Lexra toolchain:"
-echo "     cd 10-lexra-toolchain && ./build_toolchain.sh"
+echo "  1. Add toolchain to your PATH:"
+echo "     export PATH=\"${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl/bin:\$PATH\""
 echo ""
 echo "  2. Build Realtek tools:"
 echo "     cd 11-realtek-tools && ./build_tools.sh"
 echo ""
 echo "  3. Install Silabs tools:"
 echo "     cd 12-silabs-toolchain && ./install_silabs.sh"
-echo ""
-echo "See README.md for detailed instructions."
 echo ""

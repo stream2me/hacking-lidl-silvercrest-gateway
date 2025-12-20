@@ -58,32 +58,39 @@ The `-v` mount is bidirectional: built files appear in your local directories.
 
 ---
 
-## Option 2: Native Build (Ubuntu 22.04)
+## Option 2: Native Build (Ubuntu 22.04 / WSL2)
 
-For native Ubuntu or WSL2 users.
+For native Ubuntu or WSL2 users. **Recommended for Windows users.**
 
-### Step 1: Install Dependencies
+### Quick Start (One Command)
 
 ```bash
-cd 1-Build-Environment
+# Clone the repository (anywhere, rename if you want)
+git clone https://github.com/jnilo1/hacking-lidl-silvercrest-gateway.git
+cd hacking-lidl-silvercrest-gateway/1-Build-Environment
+
+# Install everything — takes ~45 minutes
 sudo ./install_deps.sh
 ```
 
-### Step 2: Build Lexra Toolchain (for RTL8196E)
+This single command:
+1. Installs all Ubuntu packages
+2. Downloads and builds crosstool-ng (in /tmp, temporary)
+3. Builds the Lexra MIPS toolchain
+4. Installs the toolchain inside the project directory
 
+The toolchain is installed to: `<project>/x-tools/mips-lexra-linux-musl/`
+
+### After Installation
+
+Add the toolchain to your PATH:
 ```bash
-cd 10-lexra-toolchain
-./build_toolchain.sh
+export PATH="$(pwd)/../x-tools/mips-lexra-linux-musl/bin:$PATH"
 ```
 
-This builds the MIPS cross-compiler for the RTL8196E (Lexra variant). Takes ~30 minutes.
+### Additional Tools
 
-After building, add to your PATH:
-```bash
-export PATH="$HOME/x-tools/mips-lexra-linux-musl/bin:$PATH"
-```
-
-### Step 3: Build Realtek Tools
+#### Build Realtek Tools
 
 ```bash
 cd 11-realtek-tools
@@ -92,7 +99,7 @@ cd 11-realtek-tools
 
 This builds `cvimg`, `lzma`, and the lzma-loader.
 
-### Step 4: Install Silabs Tools (for EFR32)
+#### Install Silabs Tools (for EFR32)
 
 ```bash
 cd 12-silabs-toolchain
@@ -145,7 +152,7 @@ source ~/silabs/env.sh
 | Target | `mips-lexra-linux-musl` |
 | GCC | 8.5.0 |
 | C library | musl 1.2.5 |
-| Location | `~/x-tools/mips-lexra-linux-musl/` |
+| Location | `<project>/x-tools/mips-lexra-linux-musl/` |
 
 The Lexra architecture is a MIPS variant without unaligned access instructions (`lwl`, `lwr`, `swl`, `swr`). Standard MIPS toolchains won't work.
 
@@ -184,10 +191,10 @@ https://www.silabs.com/developers/simplicity-studio
 
 ### PATH not set
 
-Add these to `~/.bashrc`:
+Add these to `~/.bashrc` (adjust path to your project location):
 ```bash
-# Lexra toolchain
-export PATH="$HOME/x-tools/mips-lexra-linux-musl/bin:$PATH"
+# Lexra toolchain (adjust path to your project)
+export PATH="/path/to/project/x-tools/mips-lexra-linux-musl/bin:$PATH"
 
 # Silabs tools
 source ~/silabs/env.sh

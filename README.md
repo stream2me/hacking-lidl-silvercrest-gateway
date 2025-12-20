@@ -33,24 +33,36 @@ The gateway contains **two independent processors**:
 | **Realtek RTL8196E** | Main Linux system | Kernel, rootfs, userdata |
 | **Silabs EFR32MG1B** | Zigbee radio | NCP firmware |
 
-### 1. Flash the Linux System (RTL8196E)
+### 1. Set Up the Build Environment
 
 ```bash
+# Clone anywhere, rename if you want
 git clone https://github.com/jnilo1/hacking-lidl-silvercrest-gateway.git
-cd hacking-lidl-silvercrest-gateway/3-Main-SoC-Realtek-RTL8196E
+cd hacking-lidl-silvercrest-gateway/1-Build-Environment
+
+# Install everything (dependencies + toolchain) — takes ~45 min
+sudo ./install_deps.sh
+```
+
+The toolchain is installed inside the project: `x-tools/mips-lexra-linux-musl/`
+
+### 2. Flash the Linux System (RTL8196E)
+
+```bash
+cd ../3-Main-SoC-Realtek-RTL8196E
 ./build_rtl8196e.sh
 ./flash_rtl8196e.sh
 ```
 
 See [35-Migration](./3-Main-SoC-Realtek-RTL8196E/35-Migration/) for detailed instructions.
 
-### 2. Update the Zigbee Firmware (EFR32MG1B)
+### 3. Update the Zigbee Firmware (EFR32MG1B)
 
 The original firmware (6.5.0) is not compatible with the modern `ember` driver in Zigbee2MQTT. Update to NCP firmware **7.4+** for full compatibility.
 
 See [2-Zigbee-Radio-Silabs-EFR32](./2-Zigbee-Radio-Silabs-EFR32/) for instructions.
 
-### 3. Connect to Zigbee2MQTT
+### 4. Connect to Zigbee2MQTT
 
 ```yaml
 serial:
