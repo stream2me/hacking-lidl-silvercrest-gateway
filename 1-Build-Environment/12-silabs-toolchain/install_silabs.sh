@@ -15,7 +15,7 @@ set -e
 
 # Configuration
 SLC_VERSION="5.9.3.0"
-GECKO_SDK_VERSION="4.4.0"
+GECKO_SDK_VERSION="4.5.0"
 
 # Determine project root (parent of 1-Build-Environment)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -34,11 +34,10 @@ info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
-# Detect architecture
+# Detect architecture (for ARM GCC toolchain)
 ARCH=$(uname -m)
 case "$ARCH" in
-    x86_64)  SLC_ARCH="amd64" ;;
-    aarch64) SLC_ARCH="arm64" ;;
+    x86_64|aarch64) ;;
     *)       error "Unsupported architecture: $ARCH" ;;
 esac
 
@@ -51,14 +50,14 @@ info "Installing Silicon Labs tools to: $INSTALL_DIR"
 # ============================================================================
 # Step 1: Download and install slc-cli
 # ============================================================================
-info "Downloading slc-cli v${SLC_VERSION} for ${SLC_ARCH}..."
+info "Downloading slc-cli..."
 
-SLC_URL="https://www.silabs.com/documents/login/software/slc_cli_linux_${SLC_ARCH}.zip"
-SLC_ZIP="slc_cli_linux_${SLC_ARCH}.zip"
+SLC_URL="https://www.silabs.com/documents/public/software/slc_cli_linux.zip"
+SLC_ZIP="slc_cli_linux.zip"
 
 if [ ! -f "$INSTALL_DIR/slc_cli/slc" ]; then
     wget -q --show-progress -O "$SLC_ZIP" "$SLC_URL" || error "Failed to download slc-cli"
-    unzip -q -o "$SLC_ZIP" -d slc_cli
+    unzip -q -o "$SLC_ZIP"
     rm "$SLC_ZIP"
     chmod +x slc_cli/slc
     info "slc-cli installed"
@@ -73,43 +72,25 @@ export PATH="$INSTALL_DIR/slc_cli:$PATH"
 slc --version || error "slc-cli installation failed"
 
 # ============================================================================
-# Step 2: Trust Silicon Labs signature
-# ============================================================================
-info "Trusting Silicon Labs signature..."
-slc signature trust --sdk || warn "Signature trust may have failed (non-critical)"
-
-# ============================================================================
-# Step 3: Install Gecko SDK
+# Step 2: Install Gecko SDK from GitHub
 # ============================================================================
 info "Installing Gecko SDK v${GECKO_SDK_VERSION}..."
 
 if [ ! -d "$INSTALL_DIR/gecko_sdk" ]; then
-    slc sdk install \
-        --sdk-id "com.silabs.sdk.gecko:${GECKO_SDK_VERSION}" \
-        --dest "$INSTALL_DIR/gecko_sdk" \
-        || error "Failed to install Gecko SDK"
+    git clone --depth 1 --branch "v${GECKO_SDK_VERSION}" --progress \
+        https://github.com/SiliconLabs/gecko_sdk.git gecko_sdk \
+        || error "Failed to download Gecko SDK"
     info "Gecko SDK installed"
 else
     info "Gecko SDK already installed, skipping"
 fi
 
-# ============================================================================
-# Step 4: Install SDK extensions
-# ============================================================================
-info "Installing SDK extensions..."
-
-EXTENSIONS=(
-    "com.silabs.extension.zigbee"
-    "com.silabs.extension.bluetooth"
-)
-
-for ext in "${EXTENSIONS[@]}"; do
-    info "  Installing extension: $ext"
-    slc sdk add-extension --extension "$ext" --sdk "$INSTALL_DIR/gecko_sdk" 2>/dev/null || true
-done
+# Trust the SDK signature
+info "Trusting Gecko SDK signature..."
+slc signature trust --sdk "$INSTALL_DIR/gecko_sdk" || warn "Signature trust may have failed (non-critical)"
 
 # ============================================================================
-# Step 5: Install ARM GCC toolchain
+# Step 3: Install ARM GCC toolchain
 # ============================================================================
 info "Installing ARM GCC toolchain..."
 
@@ -127,7 +108,7 @@ else
 fi
 
 # ============================================================================
-# Step 6: Install Simplicity Commander
+# Step 4: Install Simplicity Commander
 # ============================================================================
 info "Installing Simplicity Commander..."
 
@@ -142,7 +123,7 @@ else
 fi
 
 # ============================================================================
-# Step 7: Create environment setup script
+# Step 5: Create environment setup script
 # ============================================================================
 info "Creating environment setup script..."
 

@@ -144,7 +144,7 @@ echo "  - Copied project files from patches"
 # =========================================
 echo ""
 echo "[2/4] Generating project with slc..."
-slc generate bootloader-uart-xmodem.slcp --with ${TARGET_DEVICE} --force 2>&1 | tail -3
+slc generate bootloader-uart-xmodem.slcp --sdk "${GECKO_SDK}" --with ${TARGET_DEVICE} --force 2>&1 | tail -3
 
 # =========================================
 # Copy config files and patch Makefile

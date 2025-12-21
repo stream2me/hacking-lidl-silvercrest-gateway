@@ -105,7 +105,7 @@ cd 12-silabs-toolchain
 
 This downloads and installs to `<project>/silabs-tools/`:
 - slc-cli (Simplicity Commander CLI)
-- Gecko SDK 4.4.0
+- Gecko SDK 4.5.0
 - ARM GCC toolchain
 - Simplicity Commander
 
@@ -166,7 +166,7 @@ The Lexra architecture is a MIPS variant without unaligned access instructions (
 |------|-------|
 | Target | `arm-none-eabi` |
 | GCC | 12.2 |
-| SDK | Gecko SDK 4.4.0 |
+| SDK | Gecko SDK 4.5.0 |
 | CLI | slc-cli 5.9.3.0 |
 | Location | `<project>/silabs-tools/` |
 
