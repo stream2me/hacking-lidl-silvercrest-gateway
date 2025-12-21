@@ -167,7 +167,7 @@ The Lexra architecture is a MIPS variant without unaligned access instructions (
 | Target | `arm-none-eabi` |
 | GCC | 12.2 |
 | SDK | Gecko SDK 4.5.0 |
-| CLI | slc-cli 5.9.3.0 |
+| CLI | slc-cli 5.11.1.0 |
 | Location | `<project>/silabs-tools/` |
 
 ### Realtek Tools
