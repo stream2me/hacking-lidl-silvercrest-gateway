@@ -50,7 +50,7 @@ First, set up the build environment. See [1-Build-Environment](../../1-Build-Env
 
 ### Build with Docker (slc-cli)
 
-From the **project root** (e.g. ./hacking-lidl-silvercrest-gateway):
+From the project root directory (e.g. `hacking-lidl-silvercrest-gateway`):
 
 ```bash
 docker run --rm -v $(pwd):/workspace lidl-gateway-builder \

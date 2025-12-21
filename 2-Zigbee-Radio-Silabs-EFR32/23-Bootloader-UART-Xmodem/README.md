@@ -20,7 +20,8 @@ commander flash firmware/bootloader-uart-xmodem-2.4.2-crc.s37 --device EFR32MG1B
 - **arm-none-eabi-gcc** in PATH
 - **GECKO_SDK** environment variable set
 
-Or use Docker:
+Or use Docker from the `2-Zigbee-Radio-Silabs-EFR32` directory:
+
 ```bash
 docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder \
     /workspace/2-Zigbee-Radio-Silabs-EFR32/23-Bootloader-UART-Xmodem/build_bootloader.sh
