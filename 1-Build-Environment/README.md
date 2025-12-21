@@ -33,6 +33,8 @@ This takes ~45 minutes (downloads and compiles toolchains).
 
 ### Use the Image
 
+From the `1-Build-Environment` directory:
+
 ```bash
 # Interactive shell
 docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder
