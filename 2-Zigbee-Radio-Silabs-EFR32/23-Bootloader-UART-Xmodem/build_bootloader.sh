@@ -24,6 +24,10 @@ BUILD_DIR="${SCRIPT_DIR}/build"
 OUTPUT_DIR="${SCRIPT_DIR}/firmware"
 PATCHES_DIR="${SCRIPT_DIR}/patches"
 
+# Project root (for auto-detecting silabs-tools)
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+SILABS_TOOLS_DIR="${PROJECT_ROOT}/silabs-tools"
+
 # Target chip
 TARGET_DEVICE="EFR32MG1B232F256GM48"
 
@@ -42,6 +46,16 @@ echo "========================================="
 echo ""
 
 # =========================================
+# Auto-detect silabs-tools in project directory
+# =========================================
+if [ -d "${SILABS_TOOLS_DIR}/slc_cli" ]; then
+    export PATH="${SILABS_TOOLS_DIR}/slc_cli:$PATH"
+    export PATH="${SILABS_TOOLS_DIR}/arm-gnu-toolchain/bin:$PATH"
+    export PATH="${SILABS_TOOLS_DIR}/commander:$PATH"
+    export GECKO_SDK="${SILABS_TOOLS_DIR}/gecko_sdk"
+fi
+
+# =========================================
 # Check prerequisites
 # =========================================
 
@@ -51,7 +65,7 @@ if ! command -v slc >/dev/null 2>&1; then
     echo ""
     echo "Setup options:"
     echo "  1. Use Docker: docker run -it --rm -v \$(pwd):/workspace lidl-gateway-builder"
-    echo "  2. Native: See 1-Build-Environment/README.md for setup instructions"
+    echo "  2. Native: cd 1-Build-Environment/12-silabs-toolchain && ./install_silabs.sh"
     exit 1
 fi
 echo "slc: $(which slc)"
@@ -66,19 +80,19 @@ echo "ARM GCC: $(arm-none-eabi-gcc --version | head -1)"
 # Check GECKO_SDK
 if [ -z "${GECKO_SDK:-}" ]; then
     # Try common locations
-    if [ -d "/home/builder/gecko_sdk" ]; then
+    if [ -d "${SILABS_TOOLS_DIR}/gecko_sdk" ]; then
+        export GECKO_SDK="${SILABS_TOOLS_DIR}/gecko_sdk"
+    elif [ -d "/home/builder/gecko_sdk" ]; then
         export GECKO_SDK="/home/builder/gecko_sdk"
+    elif [ -d "$HOME/silabs/gecko_sdk" ]; then
+        export GECKO_SDK="$HOME/silabs/gecko_sdk"
     elif [ -d "$HOME/gecko_sdk" ]; then
         export GECKO_SDK="$HOME/gecko_sdk"
-    elif [ -d "$HOME/SimplicityStudio/SDKs/gecko_sdk" ]; then
-        export GECKO_SDK="$HOME/SimplicityStudio/SDKs/gecko_sdk"
-    elif [ -d "$HOME/SimplicityStudio/SDKs/gecko-sdk" ]; then
-        export GECKO_SDK="$HOME/SimplicityStudio/SDKs/gecko-sdk"
     else
         echo "GECKO_SDK environment variable not set"
         echo ""
-        echo "Set it to your Gecko SDK installation path:"
-        echo "  export GECKO_SDK=/path/to/gecko_sdk"
+        echo "Install Silabs tools first:"
+        echo "  cd 1-Build-Environment/12-silabs-toolchain && ./install_silabs.sh"
         exit 1
     fi
 fi

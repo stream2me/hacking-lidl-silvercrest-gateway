@@ -9,14 +9,20 @@
 # Usage:
 #   ./install_silabs.sh [install_dir]
 #
-# Default install directory: ~/silabs
+# Default install directory: <project>/silabs-tools
 
 set -e
 
 # Configuration
 SLC_VERSION="5.9.3.0"
 GECKO_SDK_VERSION="4.4.0"
-INSTALL_DIR="${1:-$HOME/silabs}"
+
+# Determine project root (parent of 1-Build-Environment)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Default to project directory, allow override
+INSTALL_DIR="${1:-${PROJECT_ROOT}/silabs-tools}"
 
 # Colors for output
 RED='\033[0;31m'

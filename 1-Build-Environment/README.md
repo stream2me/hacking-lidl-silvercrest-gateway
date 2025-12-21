@@ -103,39 +103,46 @@ cd 12-silabs-toolchain
 ./install_silabs.sh
 ```
 
-This downloads and installs:
+This downloads and installs to `<project>/silabs-tools/`:
 - slc-cli (Simplicity Commander CLI)
 - Gecko SDK 4.4.0
 - ARM GCC toolchain
+- Simplicity Commander
 
-After installation, source the environment:
-```bash
-source ~/silabs/env.sh
-```
+Build scripts auto-detect this location — no PATH configuration needed.
 
 ---
 
 ## Directory Structure
 
 ```
-1-Build-Environment/
-├── Dockerfile              # Docker image definition
-├── install_deps.sh         # Ubuntu package installation
-├── README.md               # This file
+<project>/
+├── x-tools/                    # Lexra toolchain (created by build)
+│   └── mips-lexra-linux-musl/
 │
-├── 10-lexra-toolchain/     # Lexra MIPS toolchain
-│   ├── build_toolchain.sh  # Build script
-│   ├── crosstool-ng.config # Crosstool-ng configuration
-│   └── patches/            # GCC/binutils patches for Lexra
+├── silabs-tools/               # Silabs toolchain (created by install)
+│   ├── slc_cli/
+│   ├── gecko_sdk/
+│   ├── arm-gnu-toolchain/
+│   └── commander/
 │
-├── 11-realtek-tools/       # Realtek image tools
-│   ├── build_tools.sh      # Build script
-│   ├── cvimg/              # cvimg source
-│   ├── lzma-4.65/          # LZMA compressor
-│   └── lzma-loader/        # LZMA decompression loader
-│
-└── 12-silabs-toolchain/    # Silicon Labs tools
-    └── install_silabs.sh   # Download and install slc-cli + SDK
+└── 1-Build-Environment/
+    ├── Dockerfile              # Docker image definition
+    ├── install_deps.sh         # Ubuntu package installation
+    │
+    ├── 10-lexra-toolchain/     # Lexra MIPS toolchain
+    │   ├── build_toolchain.sh  # Build script
+    │   ├── crosstool-ng.config # Crosstool-ng configuration
+    │   └── patches/            # GCC/binutils patches for Lexra
+    │
+    ├── 11-realtek-tools/       # Realtek image tools
+    │   ├── build_tools.sh      # Build script
+    │   ├── cvimg/              # cvimg source
+    │   ├── lzma-4.65/          # LZMA compressor
+    │   └── lzma-loader/        # LZMA decompression loader
+    │
+    └── 12-silabs-toolchain/    # Silicon Labs tools
+        └── install_silabs.sh   # Download and install slc-cli + SDK
 ```
 
 ---
@@ -161,6 +168,7 @@ The Lexra architecture is a MIPS variant without unaligned access instructions (
 | GCC | 12.2 |
 | SDK | Gecko SDK 4.4.0 |
 | CLI | slc-cli 5.9.3.0 |
+| Location | `<project>/silabs-tools/` |
 
 ### Realtek Tools
 
@@ -186,14 +194,13 @@ docker build --no-cache -t lidl-gateway-builder .
 The Silabs download may require login. If wget fails, manually download from:
 https://www.silabs.com/developers/simplicity-studio
 
-### Silabs PATH not set
+### Toolchain not found
 
-Add this to `~/.bashrc`:
-```bash
-source ~/silabs/env.sh
-```
+Both toolchains are auto-detected by build scripts when installed in the project directory:
+- Lexra: `<project>/x-tools/mips-lexra-linux-musl/`
+- Silabs: `<project>/silabs-tools/`
 
-Note: The Lexra toolchain PATH is auto-detected by all build scripts.
+If you installed elsewhere, set the PATH manually or use the `env.sh` script generated during installation.
 
 ---
 

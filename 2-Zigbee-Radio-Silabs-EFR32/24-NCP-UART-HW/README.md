@@ -65,14 +65,14 @@ cd /workspace/2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW
 ./build_ncp.sh
 ```
 
-### Build Natively (slc-cli, Ubuntu 22.04 / WSL2)
+### Build Natively (Ubuntu 22.04 / WSL2)
 
 ```bash
-# Ensure tools are in PATH
-export PATH="$HOME/arm-gnu-toolchain/bin:$HOME/slc_cli:$PATH"
-export GECKO_SDK="$HOME/gecko_sdk"
+# Install Silabs tools (one-time, installs to <project>/silabs-tools/)
+cd 1-Build-Environment/12-silabs-toolchain
+./install_silabs.sh
 
-# Build
+# Build (auto-detects silabs-tools)
 cd 2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW
 ./build_ncp.sh
 ```
