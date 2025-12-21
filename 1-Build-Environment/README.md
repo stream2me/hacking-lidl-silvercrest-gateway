@@ -43,7 +43,7 @@ docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder \
 
 # Build Zigbee firmware
 docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder \
-    /workspace/2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW/build.sh
+    /workspace/2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW/build_ncp.sh
 ```
 
 ### Docker Options Explained
