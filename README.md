@@ -33,38 +33,91 @@ The gateway contains **two independent processors**:
 | **Realtek RTL8196E** | Main Linux system | Kernel, rootfs, userdata |
 | **Silabs EFR32MG1B** | Zigbee radio | NCP firmware |
 
-### 1. Set Up the Build Environment
+### Choose Your Path
 
-Clone the repository anywhere:
+| | Option 1: Flash Pre-built | Option 2: Build from Source |
+|---|---|---|
+| **For** | Most users | Developers / Hackers |
+| **Time** | ~30 minutes | ~2 hours |
+| **Requires** | Python 3, USB-serial adapter | Docker or Ubuntu 22.04 |
+| **Use case** | Just want a working local gateway | Customize kernel, rootfs, firmware |
+
+______________________________________________________________________
+
+## Option 1: Flash Pre-built Firmware
+
+**No build environment needed.** Just flash the pre-built images.
+
+### Step 1: Clone the Repository
+
 ```bash
 git clone https://github.com/jnilo1/hacking-lidl-silvercrest-gateway.git
 cd hacking-lidl-silvercrest-gateway
 ```
 
-Two options (see [1-Build-Environment](./1-Build-Environment/) for details):
+### Step 2: Flash the Linux System (RTL8196E)
 
-| Approach | Command |
-|----------|---------|
-| **Ubuntu/WSL2** | `cd 1-Build-Environment && sudo ./install_deps.sh` |
-| **Docker** | `docker build -t lidl-gateway 1-Build-Environment` |
+Follow the migration guide: [35-Migration](./3-Main-SoC-Realtek-RTL8196E/35-Migration/)
 
-### 2. Flash the Linux System (RTL8196E)
+This flashes the pre-built kernel, rootfs, and userdata via TFTP.
+
+### Step 3: Update the Zigbee Firmware (EFR32MG1B)
+
+Use `universal-silabs-flasher` to update the Zigbee radio over the network:
 
 ```bash
-cd ../3-Main-SoC-Realtek-RTL8196E
-./build_rtl8196e.sh
-./flash_rtl8196e.sh
+pip install universal-silabs-flasher
+universal-silabs-flasher --device socket://<GATEWAY_IP>:8888 \
+    flash --firmware 2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW/firmware/ncp-uart-hw-7.5.1.gbl
 ```
 
-See [35-Migration](./3-Main-SoC-Realtek-RTL8196E/35-Migration/) for detailed instructions.
+See [22-Flash-Firmware](./2-Zigbee-Radio-Silabs-EFR32/22-Flash-Firmware/) for detailed instructions.
 
-### 3. Update the Zigbee Firmware (EFR32MG1B)
+### Step 4: Connect to Zigbee2MQTT
 
-The original firmware (6.5.0) is not compatible with the modern `ember` driver in Zigbee2MQTT. Update to NCP firmware **7.4+** for full compatibility.
+```yaml
+serial:
+  port: tcp://<GATEWAY_IP>:8888
+```
 
-See [2-Zigbee-Radio-Silabs-EFR32](./2-Zigbee-Radio-Silabs-EFR32/) for instructions.
+______________________________________________________________________
 
-### 4. Connect to Zigbee2MQTT
+## Option 2: Build from Source
+
+**For developers who want to customize the system.**
+
+### Step 1: Set Up the Build Environment
+
+Clone the repository:
+```bash
+git clone https://github.com/jnilo1/hacking-lidl-silvercrest-gateway.git
+cd hacking-lidl-silvercrest-gateway
+```
+
+Install the complete toolchain (see [1-Build-Environment](./1-Build-Environment/) for details):
+
+| Approach | Command | Time |
+|----------|---------|------|
+| **Ubuntu/WSL2** | `cd 1-Build-Environment && sudo ./install_deps.sh` | ~45 min |
+| **Docker** | `cd 1-Build-Environment && docker build -t lidl-gateway-builder .` | ~45 min |
+
+### Step 2: Build and Flash the Linux System
+
+```bash
+cd 3-Main-SoC-Realtek-RTL8196E
+./build_rtl8196e.sh    # Build kernel, rootfs, userdata
+./flash_rtl8196e.sh    # Flash via TFTP
+```
+
+### Step 3: Build and Flash the Zigbee Firmware
+
+```bash
+cd 2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW
+./build_ncp.sh         # Build NCP firmware
+# Then flash using universal-silabs-flasher (see Option 1, Step 3)
+```
+
+### Step 4: Connect to Zigbee2MQTT
 
 ```yaml
 serial:
@@ -81,7 +134,9 @@ Hardware documentation: pinouts, debug interfaces, chip specifications.
 
 ### [1-Build-Environment](./1-Build-Environment/)
 
-Build environment with Docker or native Ubuntu 22.04/WSL2. Includes all required toolchains.
+Build environment with Docker or native Ubuntu 22.04/WSL2. Includes all required toolchains:
+- **Lexra MIPS** — for Main SoC (RTL8196E)
+- **ARM GCC + Silabs slc-cli** — for Zigbee Radio (EFR32)
 
 ### [2-Zigbee-Radio-Silabs-EFR32](./2-Zigbee-Radio-Silabs-EFR32/)
 

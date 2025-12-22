@@ -1,10 +1,13 @@
 #!/bin/bash
-# install_deps.sh — Install all dependencies and build the Lexra toolchain
+# install_deps.sh — Install complete build environment
 #
-# This script:
-#   1. Installs all required packages
-#   2. Builds and installs crosstool-ng (in /tmp, temporary)
-#   3. Launches the toolchain build automatically
+# This script installs everything needed to build both Main SoC and Zigbee firmware:
+#   1. Installs all required Ubuntu packages
+#   2. Builds crosstool-ng and Lexra MIPS toolchain
+#   3. Builds Realtek tools (cvimg, lzma)
+#   4. Installs Silabs tools (slc-cli, Gecko SDK, ARM GCC, Commander)
+#
+# After running this script, both build environments are ready.
 #
 # Tested on: Ubuntu 22.04 LTS, WSL2
 #
@@ -158,14 +161,26 @@ sudo -u "$REAL_USER" \
 
 echo ""
 echo "========================================="
+echo "  INSTALLING SILABS TOOLS"
+echo "========================================="
+echo ""
+
+# Install Silabs tools (slc-cli, Gecko SDK, ARM GCC, Commander)
+cd "${SCRIPT_DIR}/12-silabs-toolchain"
+sudo -u "$REAL_USER" ./install_silabs.sh
+
+echo ""
+echo "========================================="
 echo "  SETUP COMPLETE"
 echo "========================================="
 echo ""
-echo "All tools are ready. You can now build the firmware:"
+echo "All tools are ready. You can now build:"
 echo ""
-echo "  cd ${PROJECT_ROOT}/3-Main-SoC-Realtek-RTL8196E"
-echo "  ./build_rtl8196e.sh"
+echo "  Main SoC (RTL8196E):"
+echo "    cd ${PROJECT_ROOT}/3-Main-SoC-Realtek-RTL8196E"
+echo "    ./build_rtl8196e.sh"
 echo ""
-echo "Optional - Install Silabs tools (for Zigbee firmware):"
-echo "  cd ${SCRIPT_DIR}/12-silabs-toolchain && ./install_silabs.sh"
+echo "  Zigbee firmware (EFR32):"
+echo "    cd ${PROJECT_ROOT}/2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW"
+echo "    ./build_ncp.sh"
 echo ""

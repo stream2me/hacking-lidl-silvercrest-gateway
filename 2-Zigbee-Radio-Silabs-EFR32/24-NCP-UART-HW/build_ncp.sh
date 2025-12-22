@@ -69,7 +69,12 @@ if ! command -v slc >/dev/null 2>&1; then
     echo "  2. Native: cd 1-Build-Environment/12-silabs-toolchain && ./install_silabs.sh"
     exit 1
 fi
-echo "slc: $(which slc)"
+SLC_VERSION=$(slc --version 2>/dev/null | head -1)
+SLC_MAJOR=$(echo "$SLC_VERSION" | grep -oE '^[0-9]+')
+echo "slc: ${SLC_VERSION}"
+if [ "$SLC_MAJOR" != "5" ]; then
+    echo "WARNING: slc-cli version ${SLC_MAJOR}.x detected, tested with 5.11.x"
+fi
 
 # Check ARM GCC
 if ! command -v arm-none-eabi-gcc >/dev/null 2>&1; then

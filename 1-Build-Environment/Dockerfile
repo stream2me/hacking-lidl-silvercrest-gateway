@@ -154,9 +154,12 @@ RUN cd /home/builder && \
     wget -q -O slc_cli.zip "https://www.silabs.com/documents/public/software/slc_cli_linux.zip" && \
     unzip -q slc_cli.zip && \
     rm slc_cli.zip && \
-    find . -name "slc" -type f -exec chmod +x {} \;
+    chmod +x slc_cli/slc
 
-ENV PATH="/home/builder/slc_cli/bin:/home/builder/slc_cli:${PATH}"
+ENV PATH="/home/builder/slc_cli:${PATH}"
+
+# Verify slc-cli
+RUN slc --version
 
 # ============================================================================
 # Step 7: Install Simplicity Commander (for .gbl generation)
@@ -173,24 +176,23 @@ ENV PATH="/home/builder/commander:${PATH}"
 RUN commander --version
 
 # ============================================================================
-# Step 8: Install Gecko SDK (from GitHub releases)
+# Step 8: Install Gecko SDK (from GitHub)
 # ============================================================================
-# Using latest release from https://github.com/SiliconLabs/gecko_sdk
-# Note: SDK uses Git LFS for binary libraries (.a files)
+# Version fixed for reproducibility (must match install_silabs.sh)
+ENV GECKO_SDK_VERSION="4.5.0"
+
 RUN git lfs install && \
     cd /home/builder && \
-    GECKO_VERSION=$(curl -s https://api.github.com/repos/SiliconLabs/gecko_sdk/releases/latest | grep '"tag_name"' | cut -d'"' -f4) && \
-    echo "Downloading Gecko SDK ${GECKO_VERSION}..." && \
-    git clone --depth 1 --branch ${GECKO_VERSION} https://github.com/SiliconLabs/gecko_sdk.git gecko_sdk && \
-    cd gecko_sdk && git lfs pull && cd .. && \
+    echo "Downloading Gecko SDK v${GECKO_SDK_VERSION}..." && \
+    git clone --depth 1 --branch "v${GECKO_SDK_VERSION}" --progress \
+        https://github.com/SiliconLabs/gecko_sdk.git gecko_sdk && \
     rm -rf gecko_sdk/.git
 
 ENV GECKO_SDK="/home/builder/gecko_sdk"
 ENV ARM_GCC_DIR="/home/builder/arm-gnu-toolchain"
 
-# Configure slc-cli to use the installed SDK and trust its signature
-RUN slc configuration --sdk=/home/builder/gecko_sdk && \
-    slc signature trust --sdk=/home/builder/gecko_sdk
+# Trust the SDK signature (required by slc-cli 5.11+)
+RUN slc signature trust --sdk /home/builder/gecko_sdk || true
 
 # ============================================================================
 # Step 9: Build Realtek tools (cvimg, lzma)

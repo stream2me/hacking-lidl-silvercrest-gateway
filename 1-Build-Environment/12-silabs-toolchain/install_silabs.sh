@@ -14,7 +14,7 @@
 set -e
 
 # Configuration
-SLC_VERSION="5.9.3.0"
+SLC_VERSION="5.11"  # Downloaded version may be newer (auto-updated by Silabs)
 GECKO_SDK_VERSION="4.5.0"
 
 # Determine project root (parent of 1-Build-Environment)

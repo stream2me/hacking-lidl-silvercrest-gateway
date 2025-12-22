@@ -68,11 +68,11 @@ cd /workspace/2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW
 ### Build Natively (Ubuntu 22.04 / WSL2)
 
 ```bash
-# Install Silabs tools (one-time, installs to <project>/silabs-tools/)
-cd 1-Build-Environment/12-silabs-toolchain
-./install_silabs.sh
+# Install build environment (one-time, ~45 min)
+cd 1-Build-Environment
+sudo ./install_deps.sh
 
-# Build (auto-detects silabs-tools)
+# Build
 cd 2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW
 ./build_ncp.sh
 ```

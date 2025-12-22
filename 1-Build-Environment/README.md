@@ -75,41 +75,17 @@ cd hacking-lidl-silvercrest-gateway/1-Build-Environment
 sudo ./install_deps.sh
 ```
 
-This single command:
-1. Installs all Ubuntu packages
-2. Downloads and builds crosstool-ng (in /tmp, temporary)
-3. Builds the Lexra MIPS toolchain
-4. Installs the toolchain inside the project directory
+This single command installs everything:
+1. Ubuntu packages (build tools, Java, etc.)
+2. Lexra MIPS toolchain (for Main SoC)
+3. Realtek tools (cvimg, lzma)
+4. Silabs tools (slc-cli, Gecko SDK, ARM GCC, Commander)
 
-The toolchain is installed to: `<project>/x-tools/mips-lexra-linux-musl/`
+All tools are installed inside the project directory:
+- `<project>/x-tools/` — Lexra toolchain
+- `<project>/silabs-tools/` — Silabs toolchain
 
-All build scripts auto-detect the toolchain location — no PATH configuration needed.
-
-### Additional Tools
-
-#### Build Realtek Tools
-
-```bash
-cd 11-realtek-tools
-./build_tools.sh
-```
-
-This builds `cvimg`, `lzma`, and the lzma-loader.
-
-#### Install Silabs Tools (for EFR32)
-
-```bash
-cd 12-silabs-toolchain
-./install_silabs.sh
-```
-
-This downloads and installs to `<project>/silabs-tools/`:
-- slc-cli (Simplicity Commander CLI)
-- Gecko SDK 4.5.0
-- ARM GCC toolchain
-- Simplicity Commander
-
-Build scripts auto-detect this location — no PATH configuration needed.
+Build scripts auto-detect these locations — no PATH configuration needed.
 
 ---
 
