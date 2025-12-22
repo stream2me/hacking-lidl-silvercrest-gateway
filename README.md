@@ -44,7 +44,7 @@ The gateway contains **two independent processors**:
 
 ______________________________________________________________________
 
-## Option 1: Flash Pre-built Firmware
+## Option 1: Flash Pre-built Linux image & Zigbee Firmware
 
 **No build environment needed.** Just flash the pre-built images.
 
