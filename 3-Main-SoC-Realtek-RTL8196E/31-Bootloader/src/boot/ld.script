@@ -1,0 +1,49 @@
+/*
+ * RTL8196E bootloader linker script
+ * Load address: 0x80400000 (cached KSEG0)
+ */
+OUTPUT_FORMAT(elf32-tradbigmips)
+OUTPUT_ARCH(mips)
+ENTRY(start)
+
+SECTIONS
+{
+  . = 0x80400000;
+
+  /* Code and read-only data */
+  .init : { *(.init) } = 0
+
+  .text ALIGN(8) : {
+    _ftext = .;
+    *(.text)
+    *(.rodata)
+    *(.rodata1)
+    *(.gnu.warning)
+  } = 0
+
+  _etext = .;
+
+  /* Initialized data */
+  .data ALIGN(8) : {
+    _fdata = .;
+    *(.data)
+    CONSTRUCTORS
+    _edata = .;
+    PROVIDE(edata = .);
+  }
+
+  /* Uninitialized data (BSS) */
+  __bss_start = .;
+  _fbss = .;
+
+  .sbss ALIGN(8) : { *(.sbss) *(.scommon) }
+
+  .bss ALIGN(8) : {
+    *(.dynbss)
+    *(.bss)
+    *(COMMON)
+    . = ALIGN(4);
+    _end = .;
+    PROVIDE(end = .);
+  } = 0
+}

@@ -505,12 +505,14 @@ out:
 }
 
 static int validate_config(const struct config *cfg) {
+  const char *sig = get_signature(cfg);
+
   if (!cfg->input_file || !cfg->output_file) {
     fprintf(stderr, "Error: Missing input/output file\n");
     return ERR_INVALID_ARG;
   }
 
-  if (!cfg->signature && !get_signature(cfg)) {
+  if (!sig) {
     fprintf(stderr, "Error: Unknown signature, please specify one with '-s' or "
                     "provide known data/cpu type\n");
     return ERR_INVALID_ARG;
@@ -533,8 +535,11 @@ static int validate_config(const struct config *cfg) {
     }
   } else {
     if (!cfg->start_addr || !cfg->burn_addr) {
-      fprintf(stderr, "Error: Missing start/burn address\n");
-      return ERR_INVALID_ARG;
+      if (!(strcmp(sig, "boot") == 0 && cfg->start_addr == 0 &&
+            cfg->burn_addr == 0)) {
+        fprintf(stderr, "Error: Missing start/burn address\n");
+        return ERR_INVALID_ARG;
+      }
     }
   }
 
