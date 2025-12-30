@@ -13,17 +13,19 @@ Used on routers/gateways with SPI flash and SDRAM.
 
 ```
 src/
-├── btcode/          # Stage 1: Initial boot code (LZMA compressed)
+├── btcode/          # Stage 1: Initial boot code (LZMA wrapper)
 │   ├── start.S      # MIPS assembly entry point
-│   ├── start_c.c    # Early C initialization
+│   ├── piggy.S      # Compressed payload wrapper
 │   ├── bootload.c   # LZMA decompression and jump to stage 2
 │   └── LzmaDecode.* # LZMA decompressor
 │
 └── boot/            # Stage 2: Main bootloader
+    ├── arch/        # MIPS architecture (head.S, setup.c, traps.c)
     ├── init/        # System initialization
     │   ├── main.c   # Main entry point
     │   ├── utility.c # Utility functions, key/button detection
     │   └── eth_tftpd.c # TFTP server
+    ├── io/          # String, console I/O functions
     ├── monitor/     # Interactive console
     │   ├── monitor.c # Command shell
     │   └── power_on_led.c # GPIO, LEDs, reset button
@@ -49,28 +51,30 @@ src/
 
 ## Toolchain
 
-**Required**: Realtek RSDK (supports `-march=4181`)
+**Required**: Custom Lexra toolchain built with crosstool-ng
 
 ```bash
-export PATH=/path/to/rsdk-4.4.7-4181-EB-2.6.30-0.9.30-m32u-140129/bin:$PATH
+export PATH=$HOME/hacking-lidl-silvercrest-gateway/x-tools/mips-lexra-linux-musl/bin:$PATH
 ```
 
-Compiler: `rsdk-linux-gcc` (MIPS big-endian, Lexra 4181)
+Compiler: `mips-lexra-linux-musl-gcc` (MIPS big-endian, Lexra LX4380, musl libc)
+
+The toolchain is built using crosstool-ng with Lexra patches. See `1-Build-Environment/` for build instructions.
 
 ---
 
 ## Current Hardware Configuration
 
-From `src/.config`:
+Hardcoded in Makefiles (no menuconfig):
 
-| Option | Value | Description |
+| Define | Value | Description |
 |--------|-------|-------------|
-| `CONFIG_RTL8196E` | y | Target SoC |
-| `CONFIG_SPI_FLASH` | y | SPI flash |
-| `CONFIG_SDRAM` | y | Memory type |
-| `CONFIG_D32_16` | y | 32 MB SDRAM |
-| `CONFIG_BOOT_RESET_ENABLE` | y | Reset button enabled |
-| `CONFIG_LZMA_ENABLE` | y | LZMA compression |
+| `RTL8196E` | 1 | Target SoC |
+| `DDR1_SDRAM` | 1 | DDR1 memory type (not DDR2) |
+| `RTL865X` | 1 | Ethernet switch family |
+| `LZMA_COMPRESS` | 1 | LZMA compression enabled |
+
+Memory: 32 MB DDR1 SDRAM (16-bit bus)
 
 ---
 
@@ -219,31 +223,13 @@ Defined in `init/ver.h`:
 
 ### Status: DISABLED by default
 
-```
-# CONFIG_RTL8196E_ULINKER_BOOT_LED is not set
-```
-
-### Available code: `monitor/power_on_led.c:454-476`
-
-```c
-#ifdef CONFIG_RTL8196E_ULINKER_BOOT_LED
-void power_on_led(void)
-{
-    // WLAN LED (via PCIE GPIO)
-    reg = (REG32(PCIE0_EP_CFG_BASE + 0x18) & 0xffff0000) | 0xb0000000;
-    (*(volatile u32 *)(reg + 0x44)) = 0x30300000;
-
-    // Ethernet LED (GPIO B6, bit 14)
-    (*(volatile u32 *)0xb800350c) &= ~(0x00004000);  // LED ON
-}
-#endif
-```
+Boot LED code exists in `monitor/power_on_led.c` but is not compiled by default.
 
 ### To enable
 
-In `src/.config` or `src/autoconf.h`:
-```c
-#define CONFIG_RTL8196E_ULINKER_BOOT_LED 1
+Add to `src/boot/Makefile` CFLAGS:
+```makefile
+-DCONFIG_RTL8196E_ULINKER_BOOT_LED
 ```
 
 ---
@@ -280,8 +266,8 @@ Produces:
 
 | File | Purpose |
 |------|---------|
-| `src/.config` | Main configuration (menuconfig) |
-| `src/autoconf.h` | C defines generated from .config |
+| `src/boot/Makefile` | Main build configuration (defines) |
+| `src/boot/include/boot_config.h` | Hardware-specific defines |
 | `src/boot/init/ver.h` | Bootloader version |
 | `src/boot/banner/mk_time` | Compile timestamp (auto-generated) |
 
@@ -289,10 +275,11 @@ Produces:
 
 ## Summary of Changes Made
 
-1. **Compilation warnings fixed**: ~80 warnings resolved
-2. **Unused code cleanup**: Removed non-RTL8196E files
-3. **Code reformatting**: Linux kernel style (`indent -linux`)
-4. **Dependency fixes**: `ver.h`, PCIE defines, `DBG_PRINT`
+1. **Toolchain migration**: From RSDK to crosstool-ng (mips-lexra-linux-musl)
+2. **Build system simplification**: Removed menuconfig, hardcoded RTL8196E config
+3. **Unused code cleanup**: Removed timer/, scanf.c, vfscanf.c, non-RTL8196E code
+4. **Header cleanup**: Replaced Linux 2.4 headers with minimal standalone headers
+5. **Compilation warnings fixed**: All warnings resolved
 
 ---
 
