@@ -101,7 +101,7 @@ Available services:
 
 ### Code: `init/utility.c`
 
-#### ESC key detection (lines 998-1015)
+#### ESC key detection (lines 209-226)
 ```c
 int pollingDownModeKeyword(int key)
 {
@@ -114,7 +114,7 @@ int pollingDownModeKeyword(int key)
 }
 ```
 
-#### Reset button detection (lines 1019-1063)
+#### Reset button detection (lines 229-264)
 ```c
 int pollingPressedButton(int pressedFlag)
 {
@@ -124,7 +124,7 @@ int pollingPressedButton(int pressedFlag)
 }
 ```
 
-#### Main function (lines 1068-1116)
+#### Main function (lines 268-302)
 ```c
 int user_interrupt(unsigned long time)
 {
@@ -138,7 +138,7 @@ int user_interrupt(unsigned long time)
 
 ### Reset button GPIO
 
-Configured in `monitor/power_on_led.c:424-437`:
+Configured in `monitor/power_on_led.c:414-421`:
 
 | Config | GPIO | Register bit |
 |--------|------|--------------|
@@ -175,37 +175,35 @@ tftp 192.168.1.6 2098
 
 ## Console Output at Boot
 
-### Main banner: `init/main.c:176-232`
+### Main banner: `init/main.c:80-98`
 
 ```c
 void showBoardInfo(void)
 {
-    prom_printf("SDRAM:");
-    prom_printf("32MB\n");
     cpu_speed = check_cpu_speed();
-    prom_printf("\n---RealTek(RTL8196E)at %s %s [%s](%dMHz)\n",
-                BOOT_CODE_TIME, B_VERSION, "16bit", cpu_speed);
+    prom_printf("RTL8196E Bootloader %s (%s)\n", B_VERSION, BOOT_CODE_TIME);
+    prom_printf("DDR1 32MB | CPU %dMHz\n", cpu_speed);
 }
 ```
 
 ### Typical output
 
 ```
-SDRAM:32MB
----RealTek(RTL8196E)at 2025.11.25-12:31+0100 v1.0 [16bit](400MHz)
+RTL8196E Bootloader v1.0 (2025.12.27-12:37+0100)
+DDR1 32MB | CPU 400MHz
 ```
 
 In download mode:
 ```
-SDRAM:32MB
----RealTek(RTL8196E)at 2025.11.25-12:31+0100 v1.0 [16bit](400MHz)
+RTL8196E Bootloader v1.0 (2025.12.27-12:37+0100)
+DDR1 32MB | CPU 400MHz
 ---Ethernet init Okay!
 <RealTek>
 ```
 
 ### Date generation
 
-Automatic at compile time via `boot/Makefile:121`:
+Automatic at compile time via `boot/Makefile:70`:
 ```makefile
 @echo #define BOOT_CODE_TIME "`date "+%Y.%m.%d-%H:%M%z"`" > ./banner/mk_time
 ```
