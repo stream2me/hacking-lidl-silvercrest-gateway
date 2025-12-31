@@ -1,0 +1,17 @@
+# Build directories
+build/
+cpcd/build/
+zigbeed/build/
+
+# Build output (host binaries)
+cpcd/bin/
+zigbeed/bin/
+
+# Temporary files
+*.log
+*.tmp
+
+# Keep RCP firmware for users who just want to flash
+!firmware/
+!firmware/*.gbl
+!firmware/*.s37
