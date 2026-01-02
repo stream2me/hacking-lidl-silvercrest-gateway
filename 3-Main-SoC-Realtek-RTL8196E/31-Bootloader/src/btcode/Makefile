@@ -66,6 +66,7 @@ boot: boot.elf
 	cp -f $@ ../boot/Output/
 
 # Create final images with headers
+# Note: For boot signature, cvimg requires both addresses to be 0
 boot.bin: boot
 	$(CVIMG_TOOL) -i $< -o $@ -s boot -e 0 -b 0
 	cp -f $@ ../boot/Output/

@@ -19,8 +19,14 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 BOOTLOADER_DIR="${SCRIPT_DIR}/src"
 OUT_DIR="${SCRIPT_DIR}/out"
 
-# Toolchain - auto-detect by walking up the repo tree
+# Toolchain - check project root first, then walk up the repo tree
 find_toolchain() {
+    # Check in the project root directory (~/hacking-lidl-silvercrest-gateway)
+    if [ -d "$PROJECT_ROOT/x-tools/mips-lexra-linux-musl/bin" ]; then
+        echo "$PROJECT_ROOT/x-tools/mips-lexra-linux-musl"
+        return 0
+    fi
+    # Fallback: walk up from script directory
     local dir="$SCRIPT_DIR"
     while [ "$dir" != "/" ]; do
         if [ -d "$dir/x-tools/mips-lexra-linux-musl/bin" ]; then
