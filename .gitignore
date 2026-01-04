@@ -9,6 +9,10 @@ node_modules/
 *.gbl
 *.hex
 *.s37
+
+# Exception: pre-built firmware files
+!2-Zigbee-Radio-Silabs-EFR32/*/firmware/*.gbl
+!2-Zigbee-Radio-Silabs-EFR32/*/firmware/*.s37
 *.img
 *.img.gz
 
