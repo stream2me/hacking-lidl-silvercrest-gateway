@@ -364,7 +364,6 @@ Example output (flash of the original Lidl gateway EZSP 6.5.0.0 firmware):
 ncp-uart-hw-7.5.1.gbl  [####################################]  100%          
 (silabs-flasher) jnilo@jnilo-Key-R:~/silabs-flasher$ 
 ```
-```
 
 #### Post-Flash: Restore Normal Operation
 
