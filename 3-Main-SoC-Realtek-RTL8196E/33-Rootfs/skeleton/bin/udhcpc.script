@@ -42,9 +42,14 @@ renew | bound)
     > "$tmpfile"
     [ -n "$domain" ] && echo "search $domain" >> "$tmpfile"
     for i in $dns ; do
-        echo " Adding DNS server $i"
+        echo "🔗 Adding DNS server $i"
         echo "nameserver $i" >> "$tmpfile"
     done
+    # Add fallback DNS if DHCP provided none
+    if [ ! -s "$tmpfile" ] || ! grep -q "^nameserver" "$tmpfile"; then
+        echo "⚠️  No DNS servers from DHCP, using fallback 8.8.8.8"
+        echo "nameserver 8.8.8.8" >> "$tmpfile"
+    fi
     mv "$tmpfile" "$realconf"
     ;;
 leasefail)
@@ -57,6 +62,13 @@ leasefail)
         echo "🛣️  Adding fallback default route via 192.168.1.1"
         route add -net default gw 192.168.1.1 dev "$interface"
     fi
+
+    # Set fallback DNS servers
+    echo "🔗 Setting fallback DNS servers"
+    cat >/var/resolv.conf <<EOF
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+EOF
     ;;
 esac
 exit 0
