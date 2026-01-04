@@ -36,6 +36,16 @@ renew | bound)
             route add default gw "$i" dev "$interface"
         done
     fi
+    realconf=/var/resolv.conf
+    echo "Recreating $realconf"
+    tmpfile="$realconf-$$"
+    > "$tmpfile"
+    [ -n "$domain" ] && echo "search $domain" >> "$tmpfile"
+    for i in $dns ; do
+        echo " Adding DNS server $i"
+        echo "nameserver $i" >> "$tmpfile"
+    done
+    mv "$tmpfile" "$realconf"
     ;;
 leasefail)
     # Backup configuration in case of DHCP failure
