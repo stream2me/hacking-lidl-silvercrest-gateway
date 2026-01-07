@@ -1,24 +1,23 @@
 #!/bin/bash
-# build_zigbeed.sh - Build zigbeed from Simplicity SDK 2025.6.2
+# build_zigbeed.sh - Build zigbeed from Gecko SDK 4.5.0
 #
 # Zigbeed is the Zigbee stack daemon that runs on Linux and communicates
-# with the 802.15.4 RCP via CPC protocol v6.
+# with the 802.15.4 RCP via CPC protocol.
 #
 # Prerequisites:
 #   - slc-cli in PATH
 #   - Native GCC toolchain (gcc, g++)
-#   - Simplicity SDK 2025.6.2
+#   - Gecko SDK 4.5.0
+#   - libcpc installed (build cpcd first)
 #
 # Usage:
 #   ./build_zigbeed.sh              # Build for current architecture
-#   ./build_zigbeed.sh arm64        # Cross-compile for ARM64
-#   ./build_zigbeed.sh arm32        # Cross-compile for ARM32
 #   ./build_zigbeed.sh clean        # Clean build directory
 #
 # Output:
 #   bin/zigbeed                     # The zigbeed daemon binary
 #
-# J. Nilo - December 2025
+# J. Nilo - January 2026
 
 set -e
 
@@ -30,15 +29,13 @@ OUTPUT_DIR="${SCRIPT_DIR}/bin"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 SILABS_TOOLS_DIR="${PROJECT_ROOT}/silabs-tools"
 
-# SDK path - Simplicity SDK 2025.6.2 (has CPC v6)
-SIMPLICITY_SDK="${SILABS_TOOLS_DIR}/simplicity_sdk_2025.6.2"
-ZIGBEED_SLCP="${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed/zigbeed.slcp"
-
-# Target architecture (default: auto-detect)
-TARGET_ARCH="${1:-auto}"
+# SDK path - Gecko SDK 4.5.0 (CPC v5)
+GECKO_SDK="${SILABS_TOOLS_DIR}/gecko_sdk"
+ZIGBEED_SAMPLE_DIR="${GECKO_SDK}/protocol/zigbee/app/zigbeed"
+ZIGBEED_SLCP="${ZIGBEED_SAMPLE_DIR}/zigbeed.slcp"
 
 # Handle clean command
-if [ "${TARGET_ARCH}" = "clean" ]; then
+if [ "${1:-}" = "clean" ]; then
     echo "Cleaning build directory..."
     rm -rf "${BUILD_DIR}"
     rm -rf "${OUTPUT_DIR}"
@@ -48,8 +45,8 @@ fi
 
 echo "========================================="
 echo "  Zigbeed Builder"
-echo "  SDK: Simplicity SDK 2025.6.2"
-echo "  CPC Protocol: v6"
+echo "  SDK: Gecko SDK 4.5.0"
+echo "  CPC Protocol: v5"
 echo "========================================="
 echo ""
 
@@ -91,58 +88,40 @@ fi
 
 # Check SDK
 if [ ! -f "${ZIGBEED_SLCP}" ]; then
-    echo "ERROR: Simplicity SDK 2025.6.2 not found at: ${SIMPLICITY_SDK}"
-    echo "       Expected zigbeed.slcp at: ${ZIGBEED_SLCP}"
+    echo "ERROR: Gecko SDK 4.5.0 not found"
+    echo "       Expected: ${ZIGBEED_SLCP}"
     exit 1
 fi
-echo "SDK: ${SIMPLICITY_SDK}"
+echo "SDK: ${GECKO_SDK}"
 
 # Trust SDK signature (required for slc generate)
 echo "  - Trusting SDK signature..."
-slc signature trust --sdk "${SIMPLICITY_SDK}" >/dev/null 2>&1 || true
+slc signature trust --sdk "${GECKO_SDK}" >/dev/null 2>&1 || true
 
 # =========================================
 # Determine target architecture
 # =========================================
-if [ "${TARGET_ARCH}" = "auto" ]; then
-    MACHINE=$(uname -m)
-    case "${MACHINE}" in
-        x86_64)
-            TARGET_ARCH="x86_64"
-            ARCH_COMPONENT="linux_arch_64"
-            ZIGBEE_ARCH="zigbee_x86_64"
-            ;;
-        aarch64)
-            TARGET_ARCH="arm64"
-            ARCH_COMPONENT="linux_arch_64"
-            ZIGBEE_ARCH="zigbee_arm64v8"
-            ;;
-        armv7l|armhf)
-            TARGET_ARCH="arm32"
-            ARCH_COMPONENT="linux_arch_32"
-            ZIGBEE_ARCH="zigbee_arm32v7"
-            ;;
-        *)
-            echo "ERROR: Unknown architecture: ${MACHINE}"
-            exit 1
-            ;;
-    esac
-elif [ "${TARGET_ARCH}" = "arm64" ]; then
-    ARCH_COMPONENT="linux_arch_64"
-    ZIGBEE_ARCH="zigbee_arm64v8"
-elif [ "${TARGET_ARCH}" = "arm32" ]; then
-    ARCH_COMPONENT="linux_arch_32"
-    ZIGBEE_ARCH="zigbee_arm32v7"
-elif [ "${TARGET_ARCH}" = "x86_64" ]; then
-    ARCH_COMPONENT="linux_arch_64"
-    ZIGBEE_ARCH="zigbee_x86_64"
-else
-    echo "ERROR: Unknown target architecture: ${TARGET_ARCH}"
-    echo "       Supported: auto, x86_64, arm64, arm32"
-    exit 1
-fi
+MACHINE=$(uname -m)
+case "${MACHINE}" in
+    x86_64)
+        TARGET_ARCH="x86_64"
+        ARCH_COMPONENTS="linux_arch_64,zigbee_x86_64"
+        ;;
+    aarch64)
+        TARGET_ARCH="arm64"
+        ARCH_COMPONENTS="linux_arch_64,zigbee_arm64"
+        ;;
+    armv7l|armhf)
+        TARGET_ARCH="arm32"
+        ARCH_COMPONENTS="linux_arch_32,zigbee_arm32"
+        ;;
+    *)
+        echo "ERROR: Unknown architecture: ${MACHINE}"
+        exit 1
+        ;;
+esac
 
-echo "Target: ${TARGET_ARCH} (${ARCH_COMPONENT}, ${ZIGBEE_ARCH})"
+echo "Target: ${TARGET_ARCH}"
 echo ""
 
 # =========================================
@@ -153,20 +132,25 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
+# Copy source files from SDK sample
+cp "${ZIGBEED_SAMPLE_DIR}"/*.c .
+cp "${ZIGBEED_SAMPLE_DIR}"/*.h .
+cp "${ZIGBEED_SAMPLE_DIR}/zigbeed.slcp" .
+echo "  - Copied sources from SDK sample"
+
 # =========================================
 # Generate project with slc
 # =========================================
 echo ""
 echo "[2/4] Generating project with slc..."
 
-# Generate the project targeting Linux with specific architecture
-slc generate "${ZIGBEED_SLCP}" \
-    --sdk "${SIMPLICITY_SDK}" \
-    --with "${ARCH_COMPONENT}" \
-    --with "${ZIGBEE_ARCH}" \
-    --with "linux" \
+# -cp: Copy necessary library files (required for cross-compilation)
+# --with: Architecture components (linux_arch_XX + zigbee_archXX)
+slc generate zigbeed.slcp \
+    -cp \
+    --sdk "${GECKO_SDK}" \
+    --with "${ARCH_COMPONENTS}" \
     -o makefile \
-    -d "${BUILD_DIR}" \
     --force 2>&1 | tail -10
 
 echo "  - Project generated"
@@ -178,17 +162,14 @@ echo ""
 echo "[3/4] Configuring build..."
 
 MAKEFILE="${BUILD_DIR}/zigbeed.Makefile"
-if [ -f "${MAKEFILE}" ]; then
-    echo "  - Makefile found"
-else
-    # Try to find the makefile
+if [ ! -f "${MAKEFILE}" ]; then
     MAKEFILE=$(find "${BUILD_DIR}" -name "*.Makefile" | head -1)
     if [ -z "${MAKEFILE}" ]; then
         echo "ERROR: No Makefile generated"
         exit 1
     fi
-    echo "  - Using: ${MAKEFILE}"
 fi
+echo "  - Using: $(basename ${MAKEFILE})"
 
 # =========================================
 # Compile
@@ -208,7 +189,6 @@ mkdir -p "${OUTPUT_DIR}"
 # Find the built binary
 ZIGBEED_BIN=$(find "${BUILD_DIR}" -name "zigbeed" -type f -executable 2>/dev/null | head -1)
 if [ -z "${ZIGBEED_BIN}" ]; then
-    # Try common locations
     for loc in "build/debug/zigbeed" "build/release/zigbeed" "zigbeed"; do
         if [ -f "${BUILD_DIR}/${loc}" ]; then
             ZIGBEED_BIN="${BUILD_DIR}/${loc}"
@@ -226,13 +206,6 @@ else
     echo "         Check build output for errors"
 fi
 
-# Copy default config
-CONFIG_SRC="${SIMPLICITY_SDK}/app/multiprotocol/apps/zigbeed/usr/local/etc/zigbeed.conf"
-if [ -f "${CONFIG_SRC}" ]; then
-    cp "${CONFIG_SRC}" "${OUTPUT_DIR}/zigbeed.conf"
-    echo "  - Copied zigbeed.conf"
-fi
-
 # =========================================
 # Summary
 # =========================================
@@ -241,6 +214,7 @@ echo "========================================="
 echo "  BUILD COMPLETE"
 echo "========================================="
 echo ""
+echo "CPC Protocol Version: 5 (GSDK 4.5.0)"
 echo "Target architecture: ${TARGET_ARCH}"
 echo ""
 
@@ -251,12 +225,8 @@ if [ -f "${OUTPUT_DIR}/zigbeed" ]; then
 fi
 
 echo ""
-echo "Output files:"
-ls -lh "${OUTPUT_DIR}/"
-echo ""
 echo "Installation:"
 echo "  sudo cp bin/zigbeed /usr/local/bin/"
-echo "  sudo cp bin/zigbeed.conf /usr/local/etc/"
 echo ""
 echo "Usage:"
 echo "  zigbeed -h                    # Show help"

@@ -45,7 +45,7 @@ fi
 echo "========================================="
 echo "  RCP 802.15.4 Firmware Builder"
 echo "  Target: ${TARGET_DEVICE}"
-echo "  CPC Protocol: v6 (backported)"
+echo "  CPC Protocol: v5 (GSDK 4.5.0)"
 echo "========================================="
 echo ""
 
@@ -115,11 +115,18 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
-# Copy project files from patches
+# SDK sample directory
+SDK_SAMPLE_DIR="${GECKO_SDK}/protocol/openthread/sample-apps/ot-ncp"
+SDK_PLATFORM_DIR="${GECKO_SDK}/util/third_party/openthread/src/lib/platform"
+
+# Copy slcp and main.c from patches, other sources from SDK sample
 cp "${PATCHES_DIR}/${PROJECT_NAME}.slcp" .
-cp "${PATCHES_DIR}/main.c" .
-cp "${PATCHES_DIR}/app.c" .
-echo "  - Copied project files from patches"
+cp "${PATCHES_DIR}/main.c" .              # Patched with RTL8196E boot delay
+cp "${SDK_SAMPLE_DIR}/app.c" .
+cp "${SDK_SAMPLE_DIR}/app.h" .
+cp "${SDK_PLATFORM_DIR}/reset_util.h" .
+echo "  - Copied slcp, main.c from patches (RTL8196E delay)"
+echo "  - Copied app.c, app.h, reset_util.h from SDK"
 
 # =========================================
 # Generate project with slc
@@ -129,31 +136,17 @@ echo "[2/5] Generating project with slc..."
 slc generate ${PROJECT_NAME}.slcp --sdk "${GECKO_SDK}" --with ${TARGET_DEVICE} --force 2>&1 | tail -5
 
 # =========================================
-# Apply CPC Protocol v6 Patch
+# Apply configuration patches
 # =========================================
 echo ""
-echo "[3/5] Applying CPC Protocol v6 backport..."
+echo "[3/5] Applying configuration..."
 
-# Copy config files
+# Copy config files for Lidl Gateway
 if [ -d "config" ]; then
     cp "${PATCHES_DIR}/sl_cpc_drv_uart_usart_vcom_config.h" config/ 2>/dev/null || true
     cp "${PATCHES_DIR}/sl_cpc_security_config.h" config/ 2>/dev/null || true
-    echo "  - Copied UART and security stub configs"
-fi
-
-# Patch sli_cpc.h to change protocol version from 5 to 6
-SLI_CPC_H="${GECKO_SDK}/platform/service/cpc/inc/sli_cpc.h"
-if [ -f "${SLI_CPC_H}" ]; then
-    # Check if already patched
-    if grep -q "SLI_CPC_PROTOCOL_VERSION.*5" "${SLI_CPC_H}"; then
-        echo "  - Creating local copy of sli_cpc.h with v6 patch..."
-        mkdir -p "${BUILD_DIR}/cpc_patch/inc"
-        cp "${SLI_CPC_H}" "${BUILD_DIR}/cpc_patch/inc/"
-        sed -i 's/SLI_CPC_PROTOCOL_VERSION\s*(\s*5\s*)/SLI_CPC_PROTOCOL_VERSION (6)/' "${BUILD_DIR}/cpc_patch/inc/sli_cpc.h"
-        echo "  - Patched SLI_CPC_PROTOCOL_VERSION: 5 -> 6"
-    else
-        echo "  - sli_cpc.h already has protocol version 6 or different"
-    fi
+    echo "  - Copied UART config (115200 baud, HW flow control, PA0/PA1/PA4/PA5)"
+    echo "  - Copied security config (CPC security disabled)"
 fi
 
 # =========================================
@@ -176,13 +169,6 @@ if [ -f "${MAKEFILE}" ]; then
 # Override optimization flags for maximum size reduction\\
 C_FLAGS := \$(subst -Os,-Oz,\$(C_FLAGS))\\
 CXX_FLAGS := \$(subst -Os,-Oz,\$(CXX_FLAGS))" "${MAKEFILE}"
-    fi
-
-    # Add CPC patch include path (before SDK includes)
-    if [ -d "${BUILD_DIR}/cpc_patch/inc" ]; then
-        echo "  - Adding CPC v6 patch include path"
-        sed -i "/^INCLUDES\s*=/a\\
-INCLUDES += -I${BUILD_DIR}/cpc_patch/inc" "${MAKEFILE}"
     fi
 fi
 
@@ -231,7 +217,7 @@ echo "========================================="
 echo "  BUILD COMPLETE"
 echo "========================================="
 echo ""
-echo "CPC Protocol Version: 6 (zigbeed 8.2 compatible)"
+echo "CPC Protocol Version: 5 (GSDK 4.5.0 native)"
 echo ""
 echo "Firmware size:"
 if [ -f "${SRC_BASE}.out" ]; then
@@ -246,8 +232,9 @@ echo "  Via UART/Xmodem: Use universal-silabs-flasher"
 echo "  Via J-Link:      commander flash firmware/${OUT_BASE}.s37 --device ${TARGET_DEVICE}"
 echo ""
 echo "Host setup (Linux):"
-echo "  1. Install cpcd and zigbeed packages"
-echo "  2. Configure cpcd for UART @ 460800 baud"
-echo "  3. Start zigbeed to connect to cpcd"
-echo "  4. Connect Zigbee2MQTT to zigbeed via EZSP socket"
+echo "  1. Build and install cpcd (see cpcd/README.md)"
+echo "  2. Build and install zigbeed (see zigbeed/README.md)"
+echo "  3. Configure cpcd for TCP @ 115200 baud (tcp://gateway:8888)"
+echo "  4. Start cpcd, then zigbeed"
+echo "  5. Connect Zigbee2MQTT with adapter: ember"
 echo ""

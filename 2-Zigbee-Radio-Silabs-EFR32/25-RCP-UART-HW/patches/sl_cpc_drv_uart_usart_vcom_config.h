@@ -3,7 +3,7 @@
  * @brief CPC UART driver configuration for Lidl Gateway
  *
  * USART0: TX=PA0, RX=PA1, RTS=PA4, CTS=PA5
- * Baudrate: 460800, Hardware Flow Control
+ * Baudrate: 115200, HW Flow Control (RTS/CTS)
  ******************************************************************************/
 
 #ifndef SL_CPC_DRV_UART_USART_VCOM_CONFIG_H
@@ -13,15 +13,15 @@
 
 // <o SL_CPC_DRV_UART_VCOM_RX_QUEUE_SIZE> Number of frames in RX queue
 // <i> Default: 10
-#define SL_CPC_DRV_UART_VCOM_RX_QUEUE_SIZE            8
+#define SL_CPC_DRV_UART_VCOM_RX_QUEUE_SIZE            10
 
 // <o SL_CPC_DRV_UART_VCOM_TX_QUEUE_SIZE> Number of frames in TX queue
 // <i> Default: 10
-#define SL_CPC_DRV_UART_VCOM_TX_QUEUE_SIZE            8
+#define SL_CPC_DRV_UART_VCOM_TX_QUEUE_SIZE            10
 
 // <o SL_CPC_DRV_UART_VCOM_BAUDRATE> UART Baudrate
 // <i> Default: 115200
-#define SL_CPC_DRV_UART_VCOM_BAUDRATE                 460800
+#define SL_CPC_DRV_UART_VCOM_BAUDRATE                 115200
 
 // <o SL_CPC_DRV_UART_VCOM_FLOW_CONTROL_TYPE> Flow control
 // <usartHwFlowControlNone=> None

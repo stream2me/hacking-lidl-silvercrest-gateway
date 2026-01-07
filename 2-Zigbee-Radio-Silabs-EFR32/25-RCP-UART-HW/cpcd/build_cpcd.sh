@@ -3,9 +3,12 @@
 #
 # cpcd is required by zigbeed - it provides libcpc for CPC communication.
 #
+# IMPORTANT: cpcd version must match the Gecko SDK version used for RCP firmware.
+#            GSDK 4.5.0 -> cpcd v4.5.0 (CPC protocol v5)
+#
 # Prerequisites:
-#   - cmake, gcc, g++
-#   - libmbedtls-dev (optional, for security)
+#   - cmake (>= 3.10), gcc, g++
+#   - libmbedtls-dev (>= 2.7.0, optional for security)
 #
 # Usage:
 #   ./build_cpcd.sh              # Build cpcd
@@ -13,10 +16,10 @@
 #   ./build_cpcd.sh clean        # Clean build directory
 #
 # Output:
-#   build/cpcd/cpcd              # The cpcd daemon
-#   build/cpcd/lib/libcpc.so     # CPC library (needed by zigbeed)
+#   bin/cpcd                     # The cpcd daemon
+#   bin/libcpc.so                # CPC library (needed by zigbeed)
 #
-# J. Nilo - December 2025
+# J. Nilo - January 2026
 
 set -e
 
@@ -26,9 +29,9 @@ CPCD_DIR="${BUILD_DIR}/cpc-daemon"
 CPCD_BUILD="${CPCD_DIR}/build"
 OUTPUT_DIR="${SCRIPT_DIR}/bin"
 
-# cpcd version compatible with Simplicity SDK 2025.6.2
+# cpcd version must match Gecko SDK version
 CPCD_REPO="https://github.com/SiliconLabs/cpc-daemon.git"
-CPCD_VERSION="v4.5.2"  # Compatible with CPC protocol v6
+CPCD_VERSION="v4.5.0"  # For GSDK 4.5.0 (CPC protocol v5)
 
 # Handle arguments
 ACTION="${1:-build}"

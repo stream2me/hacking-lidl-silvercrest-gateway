@@ -5,6 +5,8 @@ Build script for cpcd (Co-Processor Communication Daemon) from **Silicon Labs Gi
 cpcd provides the CPC transport layer between the Linux host and the RCP firmware.
 It also provides **libcpc**, the library required by zigbeed.
 
+**Version:** cpcd v4.5.0 for GSDK 4.5.0 (CPC Protocol v5)
+
 ## Prerequisites
 
 ```bash
@@ -25,11 +27,11 @@ Note: `libmbedtls-dev` is optional (for CPC security/encryption).
 
 ```
 bin/
-├── cpcd              # CPC daemon binary (~273 KB)
+├── cpcd              # CPC daemon binary (~319 KB)
 ├── cpcd.conf         # Default configuration
 ├── libcpc.so         # Symlink → libcpc.so.3
-├── libcpc.so.3       # Symlink → libcpc.so.4.5.2.0
-├── libcpc.so.4.5.2.0 # CPC library (~94 KB)
+├── libcpc.so.3       # Symlink → libcpc.so.4.5.0.0
+├── libcpc.so.4.5.0.0 # CPC library (~94 KB)
 └── include/          # Header files
     └── sl_cpc.h
 ```
@@ -68,9 +70,7 @@ Edit `/usr/local/etc/cpcd.conf` for your setup:
 ### TCP Connection (via serialgateway)
 
 ```yaml
-# Connect to Lidl Gateway via TCP
 socket_file_path: /var/run/cpcd/cpcd.sock
-tcp_server_port: 8888
 tcp_client_address: 192.168.1.xxx  # Gateway IP
 tcp_client_port: 8888
 ```
@@ -80,7 +80,7 @@ tcp_client_port: 8888
 ```yaml
 socket_file_path: /var/run/cpcd/cpcd.sock
 uart_device_file: /dev/ttyUSB0
-uart_device_baud: 460800
+uart_device_baud: 115200
 uart_hardflow: true
 ```
 
@@ -93,11 +93,6 @@ cpcd -c /usr/local/etc/cpcd.conf
 # Or with systemd
 sudo systemctl start cpcd
 ```
-
-## Version
-
-- **cpcd v4.5.2** - Compatible with CPC Protocol v6
-- Source: https://github.com/SiliconLabs/cpc-daemon
 
 ## Architecture
 
@@ -118,10 +113,10 @@ sudo systemctl start cpcd
 │   Gateway     │
 │(serialgateway)│
 └───────┬───────┘
-        │ UART 460800
+        │ UART 115200
         ▼
 ┌───────────────┐
 │  EFR32 RCP    │
-│ (CPC v6)      │
+│ (CPC v5)      │
 └───────────────┘
 ```
