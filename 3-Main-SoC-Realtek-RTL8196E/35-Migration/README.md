@@ -23,20 +23,21 @@ Migrate a Lidl/Silvercrest Zigbee Gateway from Tuya firmware to custom Linux sys
   sudo apt install tftp-hpa
   ```
 
-### Built Images
+## Required Images
 
-Run the build script first if images don't exist:
-```bash
-cd 3-Main-SoC-Realtek-RTL8196E
-./build_rtl8196e.sh
-```
+Pre-built images are available in the repository:
 
-Required images:
 | Image | Location | Description |
 |-------|----------|-------------|
 | kernel.img | `32-Kernel/` | Linux 5.10 kernel |
 | rootfs.bin | `33-Rootfs/` | Root filesystem (SquashFS) |
 | userdata.bin | `34-Userdata/` | User partition (JFFS2) |
+
+> **Note:** If you need to rebuild the images (e.g., after modifications):
+> ```bash
+> cd 3-Main-SoC-Realtek-RTL8196E
+> ./build_rtl8196e.sh
+> ```
 
 ## Migration Procedure
 

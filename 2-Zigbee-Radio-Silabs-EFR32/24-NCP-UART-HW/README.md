@@ -36,7 +36,21 @@ Located in the [`firmware/`](./firmware/) directory:
 
 ### Flashing Instructions
 
-For detailed flashing methods (UART/Xmodem, scripts, prerequisites), see [23-Bootloader-UART-Xmodem](../23-Bootloader-UART-Xmodem/).
+Two methods are available. See [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/) for detailed instructions.
+
+**Via J-Link/SWD** (requires debug probe):
+```bash
+commander flash ./firmware/ncp-uart-hw-7.5.1.s37 --device EFR32MG1B232F256GM48
+```
+
+**Via TCP/serialgateway** (no hardware access needed):
+```bash
+# On the gateway: restart serialgateway without HW flow control
+killall serialgateway && serialgateway -f &
+
+# On your PC: flash the firmware
+universal-silabs-flasher --device socket://GATEWAY_IP:8888 flash --firmware ./firmware/ncp-uart-hw-7.5.1.gbl
+```
 
 ---
 
