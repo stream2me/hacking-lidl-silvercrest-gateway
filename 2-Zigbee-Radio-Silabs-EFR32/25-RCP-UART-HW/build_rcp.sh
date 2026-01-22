@@ -1,8 +1,8 @@
 #!/bin/bash
 # build_rcp.sh — Build RCP 802.15.4 firmware for EFR32MG1B232F256GM48
 #
-# This builds an 802.15.4 RCP firmware compatible with zigbeed 8.2 and cpcd.
-# The CPC protocol version is patched from v5 to v6 for compatibility.
+# This builds an 802.15.4 RCP firmware compatible with zigbeed and cpcd.
+# Uses CPC Protocol v5 (native GSDK 4.5.0) for optimal stability.
 #
 # Prerequisites:
 #   - slc (Silicon Labs CLI) in PATH
@@ -198,14 +198,14 @@ SRC_BASE="build/debug/${PROJECT_NAME}"
 OUT_BASE="${PROJECT_NAME}"
 
 if [ -f "${SRC_BASE}.s37" ]; then
-    cp "${SRC_BASE}.s37" "${OUTPUT_DIR}/${OUT_BASE}.s37"
-    cp "${SRC_BASE}.hex" "${OUTPUT_DIR}/${OUT_BASE}.hex" 2>/dev/null || true
-    cp "${SRC_BASE}.bin" "${OUTPUT_DIR}/${OUT_BASE}.bin" 2>/dev/null || true
-
-    # Create .gbl file using commander if available
+    # Create .gbl file using commander (the only format needed for flashing)
     if command -v commander >/dev/null 2>&1; then
         echo "Creating .gbl file..."
-        commander gbl create "${OUTPUT_DIR}/${OUT_BASE}.gbl" --app "${OUTPUT_DIR}/${OUT_BASE}.s37"
+        commander gbl create "${OUTPUT_DIR}/${OUT_BASE}.gbl" --app "${SRC_BASE}.s37"
+        echo "  - Created ${OUT_BASE}.gbl"
+    else
+        echo "WARNING: commander not found, copying .s37 instead"
+        cp "${SRC_BASE}.s37" "${OUTPUT_DIR}/${OUT_BASE}.s37"
     fi
 fi
 
@@ -224,17 +224,16 @@ if [ -f "${SRC_BASE}.out" ]; then
     arm-none-eabi-size "${SRC_BASE}.out"
 fi
 echo ""
-echo "Output files:"
-ls -lh "${OUTPUT_DIR}/${OUT_BASE}".*
+echo "Output file:"
+ls -lh "${OUTPUT_DIR}/${OUT_BASE}.gbl" 2>/dev/null || ls -lh "${OUTPUT_DIR}/${OUT_BASE}".*
 echo ""
 echo "Flash commands:"
-echo "  Via UART/Xmodem: Use universal-silabs-flasher"
-echo "  Via J-Link:      commander flash firmware/${OUT_BASE}.s37 --device ${TARGET_DEVICE}"
+echo "  Via UART:   universal-silabs-flasher --device /dev/ttyUSB0 --firmware firmware/${OUT_BASE}.gbl"
+echo "  Via J-Link: commander flash firmware/${OUT_BASE}.gbl --device ${TARGET_DEVICE}"
 echo ""
 echo "Host setup (Linux):"
 echo "  1. Build and install cpcd (see cpcd/README.md)"
-echo "  2. Build and install zigbeed (see zigbeed/README.md)"
-echo "  3. Configure cpcd for TCP @ 115200 baud (tcp://gateway:8888)"
-echo "  4. Start cpcd, then zigbeed"
-echo "  5. Connect Zigbee2MQTT with adapter: ember"
+echo "  2. Build and install zigbeed (see zigbeed-8.2.2/README.md)"
+echo "  3. Configure and start with rcp-stack (see rcp-stack/README.md)"
+echo "  4. Connect Zigbee2MQTT to /tmp/ttyZ2M with adapter: ember"
 echo ""

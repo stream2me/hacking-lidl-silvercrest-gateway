@@ -1,11 +1,21 @@
 # Build directories
 build/
-cpcd/build/
-zigbeed/build/
 
-# Build output (host binaries)
-cpcd/bin/
-zigbeed/bin/
+# Cloned source repositories
+cpcd/cpc-daemon/
+zigbeed-7.5.1/gecko_sdk/
+zigbeed-8.2.2/simplicity_sdk/
+
+# Work in progress (not ready for release)
+cpcd-rtl8196e/
+
+# Test files
+cpcd/test_tcp
+cpcd/test_tcp.c
+
+# Runtime data (user-specific)
+zigbeed-8.2.2/host_token.nvm
+zigbeed-8.2.2/tmp/
 
 # Temporary files
 *.log
@@ -14,4 +24,3 @@ zigbeed/bin/
 # Keep RCP firmware for users who just want to flash
 !firmware/
 !firmware/*.gbl
-!firmware/*.s37

@@ -19,7 +19,6 @@ component:
   - id: cpc_secondary_driver_uart_usart
     instance:
       - vcom
-  - id: rail_util_pti
   - id: bootloader_interface
   - id: udelay
 
@@ -37,6 +36,10 @@ configuration:
   # Stack size
   - name: SL_STACK_SIZE
     value: 2752
+
+  # Enable VCOM
+  - name: SL_BOARD_ENABLE_VCOM
+    value: 1
 
   # UART: 115200 baud, HW flow control
   - name: SL_CPC_DRV_UART_VCOM_BAUDRATE
