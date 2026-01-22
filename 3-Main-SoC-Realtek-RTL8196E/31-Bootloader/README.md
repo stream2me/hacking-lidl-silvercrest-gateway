@@ -1,5 +1,12 @@
 # Realtek Bootloader
 
+> **WARNING: WORK IN PROGRESS - DO NOT FLASH**
+>
+> This bootloader is under development and **does not work yet**.
+> Flashing it will **brick your device** and require hardware recovery (JTAG/SPI).
+>
+> This directory is provided for documentation and development purposes only.
+
 The RTL8196E gateway uses a proprietary Realtek bootloader stored in the first 128 KB of flash memory.
 
 ## Overview
