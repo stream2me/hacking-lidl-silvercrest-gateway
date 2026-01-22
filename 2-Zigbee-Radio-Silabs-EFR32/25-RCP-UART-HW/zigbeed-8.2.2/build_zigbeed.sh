@@ -2,11 +2,10 @@
 # build_zigbeed.sh - Build and install zigbeed from Simplicity SDK (EmberZNet 8.2.2)
 #
 # Portable script for x86_64, ARM64 (Raspberry Pi 4/5), ARM32.
-# Uses the Simplicity SDK installed in silabs-tools/simplicity_sdk_2025.6.2.
+# Automatically downloads Simplicity SDK 2025.6.2 if not present.
 #
 # Prerequisites:
-#   - Simplicity SDK 2025.6.2 installed via 1-Build-Environment/
-#   - slc-cli in PATH
+#   - slc-cli in PATH (install via 1-Build-Environment/)
 #   - libcpc installed (build cpcd first)
 #
 # Usage:
@@ -42,14 +41,22 @@ echo "========================================="
 # Check prerequisites
 # =========================================
 
-# Check SDK
+# SDK version configuration
+SIMPLICITY_SDK_VERSION="2025.6.2"
+SIMPLICITY_SDK_TAG="v${SIMPLICITY_SDK_VERSION}"
+
+# Check/install SDK
 if [ ! -d "${SIMPLICITY_SDK}/protocol/zigbee" ]; then
-    echo "ERROR: Simplicity SDK not found at ${SIMPLICITY_SDK}"
+    echo "Simplicity SDK not found at ${SIMPLICITY_SDK}"
+    echo "Downloading from GitHub (this may take a while)..."
     echo ""
-    echo "Install it first:"
-    echo "  cd ${PROJECT_ROOT}/1-Build-Environment"
-    echo "  ./install_silabs.sh"
-    exit 1
+    mkdir -p "${SILABS_TOOLS}"
+    git clone --depth 1 --branch "${SIMPLICITY_SDK_TAG}" \
+        https://github.com/SiliconLabs/simplicity_sdk.git \
+        "${SIMPLICITY_SDK}" \
+        || { echo "ERROR: Failed to clone Simplicity SDK"; exit 1; }
+    echo "Simplicity SDK ${SIMPLICITY_SDK_VERSION} installed"
+    echo ""
 fi
 
 # Check slc

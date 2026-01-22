@@ -15,14 +15,15 @@ The Simplicity SDK 2025.6.2 produces zigbeed with EmberZNet 8.2.2 (EZSP 18).
 
 ## Prerequisites
 
-1. **Simplicity SDK 2025.6.2** installed in `silabs-tools/simplicity_sdk_2025.6.2`
-2. **slc-cli** installed in `silabs-tools/slc_cli` or in PATH
-3. **cpcd** installed (provides libcpc)
+1. **slc-cli** installed in `silabs-tools/slc_cli` or in PATH (via `1-Build-Environment/`)
+2. **cpcd** installed (provides libcpc)
 
 ```bash
 # Install cpcd first
 cd ../cpcd && ./build_cpcd.sh
 ```
+
+> **Note:** The Simplicity SDK 2025.6.2 is downloaded automatically from GitHub on first build.
 
 ## Build and Install
 
@@ -50,11 +51,12 @@ The script auto-detects your architecture and patches the Makefile accordingly.
 
 ## How It Works
 
-1. **Generate project** using `slc generate` from the SDK sample
-2. **Replace SDK copy** with symlink (slc copies partial headers)
-3. **Fix architecture** in library paths (slc defaults to arm64v8)
-4. **Build** using the generated Makefile
-5. **Install** to `/usr/local/bin/`
+1. **Download SDK** from GitHub if not present (shallow clone, ~1.5 GB)
+2. **Generate project** using `slc generate` from the SDK sample
+3. **Replace SDK copy** with symlink (slc copies partial headers)
+4. **Fix architecture** in library paths (slc defaults to arm64v8)
+5. **Build** using the generated Makefile
+6. **Install** to `/usr/local/bin/`
 
 ### Key differences from Gecko SDK build
 
