@@ -23,7 +23,49 @@ This firmware transforms the gateway into an autonomous Zigbee router that exten
 | Radio | 2.4GHz IEEE 802.15.4 |
 | UART | PA0 (TX), PA1 (RX), PA4 (RTS), PA5 (CTS) @ 115200 baud |
 
-## Building
+---
+
+## Option 1: Flash Pre-built Firmware (Recommended)
+
+A pre-built firmware is available in the `firmware/` directory. This is the quickest way to get started.
+
+### Prerequisites
+
+1. **Install universal-silabs-flasher** (see [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/) for details)
+
+2. **Restart serialgateway with `-f` flag:**
+
+   By default, `serialgateway` runs with hardware flow control enabled. The flasher requires flow control to be **disabled** to communicate with the bootloader.
+
+   On the gateway via SSH:
+   ```bash
+   killall serialgateway && serialgateway -f
+   ```
+
+   The `-f` flag disables hardware flow control, allowing the flasher to reset the EFR32 into bootloader mode.
+
+### Flash
+
+```bash
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/z3-router-7.5.1.gbl
+```
+
+### After flashing
+
+Reboot the gateway to restore normal serialgateway operation:
+```bash
+reboot
+```
+
+The router firmware runs autonomously — no host application needed. You can leave serialgateway running normally or stop it entirely.
+
+---
+
+## Option 2: Build from Source
+
+For users who want to customize network parameters, modify the code, or use a different EmberZNet version.
 
 ### Prerequisites
 
@@ -51,10 +93,20 @@ cd 2-Zigbee-Radio-Silabs-EFR32/27-Router
 
 ```
 firmware/
-├── z3-router-7.5.1.gbl   # For UART/Xmodem flashing
-├── z3-router-7.5.1.s37   # For J-Link/SWD flashing
-├── z3-router-7.5.1.hex   # Intel HEX format
-└── z3-router-7.5.1.bin   # Raw binary
+└── z3-router-7.5.1.gbl   # For UART/Xmodem flashing
+```
+
+Other formats (.s37, .hex, .bin) are generated in `build/` but not saved.
+
+### Customization
+
+Edit `patches/z3-router.slcp` to modify network parameters:
+
+```yaml
+configuration:
+- {name: EMBER_MAX_END_DEVICE_CHILDREN, value: '16'}  # Max child devices
+- {name: EMBER_SOURCE_ROUTE_TABLE_SIZE, value: '50'}  # Route table entries
+- {name: EMBER_PACKET_BUFFER_COUNT, value: '64'}      # Packet buffers
 ```
 
 ### Clean
@@ -63,29 +115,20 @@ firmware/
 ./build_router.sh clean
 ```
 
-## Flashing
+### Flash
 
-### Via UART (recommended)
-
-Requires access to the gateway's serial port (see `silabs-flasher/` or use `universal-silabs-flasher`):
-
+**Via network (same as Option 1):**
 ```bash
-# Using universal-silabs-flasher
-pip install universal-silabs-flasher
-
-# Flash via network (if ser2net is running on gateway)
+# On gateway: killall serialgateway && serialgateway -f
 universal-silabs-flasher \
-    --device tcp://192.168.1.X:8888 \
-    --firmware firmware/z3-router-7.5.1.gbl \
-    flash
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/z3-router-7.5.1.gbl
+# Then reboot gateway
 ```
 
-### Via J-Link/SWD
-
-If you have physical access to the SWD pads:
-
+**Via J-Link/SWD** (if you have physical access to the SWD pads):
 ```bash
-commander flash firmware/z3-router-7.5.1.s37 \
+commander flash build/debug/z3-router.s37 \
     --device EFR32MG1B232F256GM48
 ```
 
