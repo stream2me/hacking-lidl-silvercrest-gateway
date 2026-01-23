@@ -10,9 +10,8 @@ node_modules/
 *.hex
 *.s37
 
-# Exception: pre-built firmware files
+# Exception: pre-built firmware files (only .gbl for UART flashing)
 !2-Zigbee-Radio-Silabs-EFR32/*/firmware/*.gbl
-!2-Zigbee-Radio-Silabs-EFR32/*/firmware/*.s37
 *.img
 *.img.gz
 
