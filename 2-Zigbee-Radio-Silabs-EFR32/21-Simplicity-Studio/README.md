@@ -1,137 +1,33 @@
-# Installing Simplicity Studio V5
+# Simplicity Studio V5
 
-## Overview
 
-Simplicity Studio V5 (SSV5) is the official development environment
-provided by **Silicon Labs** for developing, compiling, and flashing
-firmware onto **EFR32** chips. This guide outlines the installation steps
-for both **Windows** and **Linux** systems.
+## Silicon Labs Tools Overview
 
-______________________________________________________________________
+Silicon Labs provides several tools for EFR32 development. See the [full list](https://www.silabs.com/software-and-tools/simplicity-studio/developer-tools).
 
-## 1. Creating a Silicon Labs Account
+| Tool | Description |
+|------|-------------|
+| **Simplicity Studio** | Full IDE with GUI for project creation, configuration, and flashing |
+| **slc** | Command-line tool to create and configure projects |
+| **Commander** | Flash, debug, and secure devices via GUI or CLI |
+| **Network Analyzer** | Capture and analyze wireless network traffic |
 
-Before downloading Simplicity Studio, you must create a **free Silicon Labs
-account**:
+**Simplicity Studio V5** is Silicon Labs' official IDE for developing and flashing firmware onto EFR32MG1B chips. It is an alternative to the CLI-based approach used in this project (see [24-NCP-UART-HW](../24-NCP-UART-HW/), [25-RCP-UART-HW](../25-RCP-UART-HW/), etc.) which uses `slc`.
 
-1. Go to [Silicon Labs Developer Portal](https://www.silabs.com/developers)
-2. Click **Sign Up** and complete the registration process.
-3. Once registered, log in to your account to access the download page.
+**Note:** The EFR32MG1B is a Series 1 chip. Simplicity Studio V5 is the latest Silabs IDE supporting Series 1. The newer Simplicity Studio V6 only supports Series 2 chips.
 
-______________________________________________________________________
+## Download
 
-## 2. Installation on Windows
+Download from the official Silicon Labs website:
 
-### **2.1 Download Simplicity Studio V5**
+https://www.silabs.com/software-and-tools/simplicity-studio/simplicity-studio-version-5
 
-- Visit the official Silicon Labs website:\
-  [https://www.silabs.com/developers/simplicity-studio](https://www.silabs.com/developers/simplicity-studio)
-- Log in to your account and download the **Windows Installer**.
+A free Silicon Labs account may be required later to download SDKs.
 
-### **2.2 Install Simplicity Studio**
+## Notes
 
-1. Run the downloaded installer (`SimplicityStudio.exe`).
-2. Follow the on-screen instructions and accept the license agreements.
-3. Select the **installation directory** (default is recommended).
-4. Allow the installation to complete, then launch **Simplicity Studio
-   V5**.
-
-### **2.3 Install Required Components**
-
-1. **Access Package Manager**: From the Simplicity Studio home page,
-   navigate to the top menu and select **Install** > **Manage Installed
-   Packages**.
-
-2. **Open SDKs Tab**: In the Package Manager window, click on the **SDKs**
-   tab to view the list of installed Software Development Kits.
-
-3. **Modify Gecko SDK Version**:
-
-   - Locate the Gecko SDK in the list.
-   - Click the three-dot menu (ellipsis) next to the current Gecko SDK
-     version.
-   - From the dropdown menu, select **Change Version**.
-
-4. **Select New Version**: In the subsequent dialog, choose the desired
-   Gecko SDK version from the available options.
-
-5. **Finalize Changes**: Click **Finish** to apply the changes and install
-   the selected SDK version.
-
-For more detailed information, refer to the official Silicon Labs
-documentation on upgrading a project to a new GSDK version.
-
-### **2.4 Verifying the Installation**
-
-1. Optionally, connect an **ARM** or **Segger J-Link** debugger to the
-   gateway JTAG interface (See
-   [Backup & restore section](../22-Backup-Restore) for details).
-2. Open the **Tools** menu and select `Commander`.
-3. Run the following command to check the device:
-   ```sh
-   commander device info
-   ```
-   If the device is detected, Simplicity Studio is correctly installed.
-
-______________________________________________________________________
-
-## 3. Installation on Linux
-
-### **3.1 Download and Install Dependencies**
-
-Before installing SSV5, ensure you have the required system dependencies:
-
-```sh
-sudo apt update && sudo apt install -y libncurses5 libtinfo5 libx11-6 libxext6 libxrender1 libxtst6 libxi6
-```
-
-These are required for the GUI to function correctly.
-
-### **3.2 Download Simplicity Studio V5**
-
-- Visit the Silicon Labs website:
-  [https://www.silabs.com/developers/simplicity-studio](https://www.silabs.com/developers/simplicity-studio)
-- Log in to your account and download the **Linux installer**
-  (`SimplicityStudioV5.tgz`).
-
-### **3.3 Extract and Install**
-
-1. Open a terminal and navigate to the download location:
-   ```sh
-   cd ~/Downloads
-   ```
-2. Extract the archive:
-   ```sh
-   tar -xvzf SimplicityStudioV5.tgz
-   ```
-3. Move into the extracted directory:
-   ```sh
-   cd SimplicityStudioV5
-   ```
-4. Run the installer:
-   ```sh
-   ./studio.sh
-   ```
-
-### **3.4 Install Required Components**
-
-Follow the same steps as in the Windows installation to install: the
-**Gecko SDK Suite**.
-
-### **3.5 Verifying the Installation**
-
-1. Optionally, connect an **ARM** or **Segger J-Link** debugger to the
-   gateway JTAG interface (See Backup & restore section for details).
-2. Open a terminal and run:
-   ```sh
-   commander device info
-   ```
-   If the device is detected, your installation is complete.
-
-______________________________________________________________________
-
-## 4. Additional Notes
-
+- **Debugger (J-Link, etc.)**: Required to flash firmware via SWD. See
+  [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/) for hardware setup.
 - **Administrator Privileges**: On some Linux systems, you may need to run
   Simplicity Studio as root.
   ```sh
@@ -148,9 +44,3 @@ ______________________________________________________________________
   ```sh
   sudo apt install default-jre
   ```
-
-______________________________________________________________________
-
-This guide ensures a smooth installation process for **Simplicity Studio
-V5** on both **Windows** and **Linux**. You are now ready to compile and
-flash firmware onto the Lidl Silvercrest gateway.
