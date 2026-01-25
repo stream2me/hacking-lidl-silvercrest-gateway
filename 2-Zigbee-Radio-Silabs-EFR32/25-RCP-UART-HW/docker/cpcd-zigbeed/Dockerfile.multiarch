@@ -77,7 +77,10 @@ ENV PATH="/opt/slc_cli:${PATH}"
 
 # Trust SDK and generate makefile
 RUN slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
-RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile --force 2>&1 | tail -5
+RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile -name=zigbeed --force 2>&1 | tail -10
+
+# Debug: show generated files
+RUN ls -la *.Makefile *.mak Makefile 2>/dev/null || echo "No Makefile found, listing all:" && ls -la
 
 # Fix SDK symlink
 RUN rm -rf simplicity_sdk_* && \
@@ -117,13 +120,19 @@ LIBS += \\
   \$(ZIGBEE_LIB_PATH)/zigbee-zll/release_singlenetwork/libzigbee-zll.a
 ENDPATCH
 
-RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile | head -1) && \
-    awk '/-include.*\.project\.mak/{print; system("cat libs_patch.mak"); next}1' \
-    "${MAKEFILE}" > "${MAKEFILE}.tmp" && \
-    mv "${MAKEFILE}.tmp" "${MAKEFILE}"
+# Find and patch Makefile
+RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile 2>/dev/null | head -1 || echo "Makefile") && \
+    echo "Using Makefile: ${MAKEFILE}" && \
+    if [ -f "${MAKEFILE}" ]; then \
+        awk '/-include.*\.project\.mak/{print; system("cat libs_patch.mak"); next}1' \
+        "${MAKEFILE}" > "${MAKEFILE}.tmp" && \
+        mv "${MAKEFILE}.tmp" "${MAKEFILE}"; \
+    else \
+        echo "ERROR: Makefile not found!" && ls -la && exit 1; \
+    fi
 
 # Build zigbeed
-RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile | head -1) && \
+RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile 2>/dev/null | head -1 || echo "Makefile") && \
     make -f "${MAKEFILE}" -j$(nproc)
 
 # Install to staging directory
