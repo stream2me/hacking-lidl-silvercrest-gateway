@@ -138,18 +138,21 @@ FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install runtime dependencies
+# Install runtime dependencies (no libmbedcrypto - copied from builder)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     socat \
     supervisor \
     netcat-openbsd \
     gettext-base \
-    libmbedcrypto16t64 \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binaries from builder
 COPY --from=builder /install/usr/local /usr/local
+
+# Copy mbedcrypto library from builder (needed by cpcd even with encryption disabled)
+RUN mkdir -p /usr/local/lib
+COPY --from=builder /usr/lib/*/libmbedcrypto.so* /usr/local/lib/
 
 # Update library cache
 RUN ldconfig
