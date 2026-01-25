@@ -34,6 +34,7 @@ RUN git clone --depth 1 --branch ${CPCD_VERSION} https://github.com/SiliconLabs/
         -DCMAKE_INSTALL_PREFIX=/usr/local \
         -DENABLE_ENCRYPTION=OFF \
     && make -j$(nproc) \
+    && make install \
     && make install DESTDIR=/install \
     && ldconfig
 
