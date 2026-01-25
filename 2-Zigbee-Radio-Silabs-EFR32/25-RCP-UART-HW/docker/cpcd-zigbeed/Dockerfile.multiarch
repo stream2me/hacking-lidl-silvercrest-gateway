@@ -52,13 +52,28 @@ RUN git clone --depth 1 --branch ${SIMPLICITY_SDK_VERSION} \
 
 ENV SIMPLICITY_SDK=/opt/simplicity_sdk
 
-# Detect architecture and set library path
+# Detect architecture and set parameters for slc
+# SDK lib path format: x86-64, arm64v8, arm32v7
+# slc zigbee component: zigbee_x86_64, zigbee_arm64, zigbee_arm32
 RUN ARCH=$(case "$(uname -m)" in \
         x86_64)  echo "x86-64" ;; \
         aarch64) echo "arm64v8" ;; \
         armv7l)  echo "arm32v7" ;; \
         *)       echo "x86-64" ;; \
-    esac) && echo "${ARCH}" > /tmp/arch.txt
+    esac) && \
+    ZIGBEE_ARCH=$(case "$(uname -m)" in \
+        x86_64)  echo "zigbee_x86_64" ;; \
+        aarch64) echo "zigbee_arm64" ;; \
+        armv7l)  echo "zigbee_arm32" ;; \
+        *)       echo "zigbee_x86_64" ;; \
+    esac) && \
+    LINUX_ARCH=$(case "$(uname -m)" in \
+        armv7l)  echo "linux_arch_32" ;; \
+        *)       echo "linux_arch_64" ;; \
+    esac) && \
+    echo "${ARCH}" > /tmp/arch.txt && \
+    echo "${ZIGBEE_ARCH}" > /tmp/zigbee_arch.txt && \
+    echo "${LINUX_ARCH}" > /tmp/linux_arch.txt
 
 # Build zigbeed
 WORKDIR /build/zigbeed
@@ -90,13 +105,20 @@ RUN slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
 # Debug: check Java and slc versions
 RUN java -version && slc --version
 
-# Generate makefile (slc creates the SDK symlink automatically)
-RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile -name=zigbeed --force && \
+# Generate makefile with correct architecture components
+# --with=zigbee_<arch>,linux_arch_<bits> selects the right prebuilt libraries
+# --without=zigbee_recommended_linux_arch avoids architecture conflicts
+RUN ZIGBEE_ARCH=$(cat /tmp/zigbee_arch.txt) && \
+    LINUX_ARCH=$(cat /tmp/linux_arch.txt) && \
+    echo "=== Building for ${ZIGBEE_ARCH}, ${LINUX_ARCH} ===" && \
+    slc generate zigbeed.slcp \
+        --sdk "${SIMPLICITY_SDK}" \
+        --with="${ZIGBEE_ARCH},${LINUX_ARCH}" \
+        --without=zigbee_recommended_linux_arch \
+        -o makefile \
+        -name=zigbeed \
+        --force && \
     echo "=== Generated files ===" && ls -la
-
-# Patch Makefile for correct architecture (slc may generate paths for different arch)
-RUN ARCH=$(cat /tmp/arch.txt) && \
-    find . -name "*.mak" -exec sed -i "s|/gcc/arm64v8/|/gcc/${ARCH}/|g; s|/gcc/x86-64/|/gcc/${ARCH}/|g; s|/gcc/arm32v7/|/gcc/${ARCH}/|g" {} \;
 
 # Build zigbeed (let slc-generated Makefile handle library dependencies)
 RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile 2>/dev/null | head -1 || echo "Makefile") && \
