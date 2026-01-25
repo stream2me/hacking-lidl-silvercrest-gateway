@@ -10,9 +10,9 @@ This firmware transforms the gateway into an autonomous Zigbee router that exten
 - **Auto-join** - Automatically joins open Zigbee networks via network steering
 - **Child support** - Up to 16 sleepy end-devices as children
 - **Source routing** - 50-entry route table for large networks
-- **Minimal footprint** - ~185KB flash (35KB margin on 256KB chip)
+- **Minimal footprint** - ~186KB flash (34KB margin on 256KB chip)
 - **NVM3 storage** - 36KB for network credentials and tokens
-- **Mini-CLI** - Bootloader access via `universal-silabs-flasher` (reflash support)
+- **Mini-CLI** - Bootloader access and network management via serial commands
 
 ## Hardware
 
@@ -203,9 +203,9 @@ Check routing is working:
 
 ## Technical Details
 
-### Mini-CLI for Bootloader Access
+### Mini-CLI for Bootloader and Network Management
 
-The firmware includes a lightweight CLI (only ~2KB) that allows reflashing without J-Link.
+The firmware includes a lightweight CLI (~3KB) that allows reflashing without J-Link and managing the Zigbee network.
 
 #### Commands
 
@@ -214,6 +214,9 @@ The firmware includes a lightweight CLI (only ~2KB) that allows reflashing witho
 | `version` | `stack ver. [7.5.1.0]` | Show stack version |
 | `bootloader reboot` | `Rebooting...` | Enter Gecko bootloader |
 | `info` | `Zigbee Router - EmberZNet 7.5.1` | Show firmware info |
+| `network status` | `Network: JOINED (channel 15, PAN 0x1234)` | Show network status |
+| `network leave` | `Leaving network...` | Leave current network |
+| `network steer` | `Starting network steering...` | Join an open network |
 | `help` | Command list | Show available commands |
 
 #### Architecture
@@ -249,6 +252,15 @@ echo "help" > /dev/ttyS1
 
 echo "info" > /dev/ttyS1
 # Output: Zigbee Router - EmberZNet 7.5.1
+
+echo "network status" > /dev/ttyS1
+# Output: Network: JOINED (channel 15, PAN 0x1234)
+
+echo "network leave" > /dev/ttyS1
+# Output: Leaving network...
+
+echo "network steer" > /dev/ttyS1
+# Output: Starting network steering...
 
 # Enter bootloader (caution: requires reflash or "2" to exit)
 echo "bootloader reboot" > /dev/ttyS1
@@ -332,9 +344,9 @@ This allows you to reflash the router without physical access. Unlike NCP firmwa
 
 ```
 Flash (256KB):
-├── Application     ~185KB
+├── Application     ~186KB
 ├── NVM3 Storage     36KB
-└── Free            ~35KB
+└── Free            ~34KB
 
 RAM (32KB):
 ├── Stack + Heap    ~16KB
@@ -358,7 +370,7 @@ The following components were excluded to minimize flash usage:
 
 - **No Identify**: The "Identify" button in Z2M/ZHA won't trigger any visual feedback (the gateway has no accessible LED anyway)
 - **No Find-and-Bind**: Cannot do direct device-to-device binding (not needed for a pure router)
-- **Mini-CLI only**: The full CLI framework (~28KB) is replaced by a lightweight mini-CLI (~2KB) with only essential commands for bootloader access
+- **Mini-CLI only**: The full CLI framework (~28KB) is replaced by a lightweight mini-CLI (~3KB) with essential commands for bootloader access and network management
 
 All core routing functionality is preserved.
 

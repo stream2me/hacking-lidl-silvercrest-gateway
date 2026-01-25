@@ -74,11 +74,49 @@ static void cliProcessCommand(void)
     snprintf(infoStr, sizeof(infoStr), "Zigbee Router - EmberZNet %d.%d.%d\r\n> ",
              EMBER_MAJOR_VERSION, EMBER_MINOR_VERSION, EMBER_PATCH_VERSION);
     cliPrint(infoStr);
+  } else if (strcmp(cliBuffer, "network status") == 0) {
+    // Show network status
+    EmberNetworkStatus state = emberAfNetworkState();
+    char statusStr[80];
+    if (state == EMBER_JOINED_NETWORK) {
+      uint8_t channel = emberGetRadioChannel();
+      EmberPanId panId = emberAfGetPanId();
+      snprintf(statusStr, sizeof(statusStr), "Network: JOINED (channel %d, PAN 0x%04X)\r\n> ",
+               channel, panId);
+    } else if (state == EMBER_NO_NETWORK) {
+      snprintf(statusStr, sizeof(statusStr), "Network: NOT JOINED\r\n> ");
+    } else {
+      snprintf(statusStr, sizeof(statusStr), "Network: state %d\r\n> ", state);
+    }
+    cliPrint(statusStr);
+  } else if (strcmp(cliBuffer, "network leave") == 0) {
+    // Leave the network
+    EmberStatus status = emberLeaveNetwork();
+    if (status == EMBER_SUCCESS) {
+      cliPrint("Leaving network...\r\n> ");
+    } else {
+      char errStr[40];
+      snprintf(errStr, sizeof(errStr), "Leave failed: 0x%02X\r\n> ", status);
+      cliPrint(errStr);
+    }
+  } else if (strcmp(cliBuffer, "network steer") == 0) {
+    // Start network steering to join a network
+    EmberStatus status = emberAfPluginNetworkSteeringStart();
+    if (status == EMBER_SUCCESS) {
+      cliPrint("Starting network steering...\r\n> ");
+    } else {
+      char errStr[40];
+      snprintf(errStr, sizeof(errStr), "Steering failed: 0x%02X\r\n> ", status);
+      cliPrint(errStr);
+    }
   } else if (strcmp(cliBuffer, "help") == 0) {
     cliPrint("Commands:\r\n");
     cliPrint("  version           - Show stack version\r\n");
     cliPrint("  bootloader reboot - Enter bootloader\r\n");
     cliPrint("  info              - Show device info\r\n");
+    cliPrint("  network status    - Show network status\r\n");
+    cliPrint("  network leave     - Leave current network\r\n");
+    cliPrint("  network steer     - Join an open network\r\n");
     cliPrint("  help              - Show this help\r\n");
     cliPrint("> ");
   } else {
