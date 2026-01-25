@@ -82,14 +82,9 @@ RUN slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
 # Debug: check Java and slc versions
 RUN java -version && slc --version
 
-# Generate makefile (show full output for debugging)
-RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile -name=zigbeed --force 2>&1; \
+# Generate makefile (slc creates the SDK symlink automatically)
+RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile -name=zigbeed --force && \
     echo "=== Generated files ===" && ls -la
-
-# Fix SDK symlink
-RUN rm -rf simplicity_sdk_* && \
-    SDK_LINK=$(basename $(ls -d ${SIMPLICITY_SDK}/../simplicity_sdk* 2>/dev/null | head -1) 2>/dev/null || echo "simplicity_sdk_2024.12.2") && \
-    ln -s "${SIMPLICITY_SDK}" "${SDK_LINK}" 2>/dev/null || ln -s "${SIMPLICITY_SDK}" simplicity_sdk_2024.12.2
 
 # Patch Makefile for correct architecture
 RUN ARCH=$(cat /tmp/arch.txt) && \
