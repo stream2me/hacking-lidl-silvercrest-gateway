@@ -82,13 +82,9 @@ RUN ARCH=$(case "$(uname -m)" in \
     echo "${LINUX_ARCH}" > /tmp/linux_arch.txt && \
     echo "Building for: ${ARCH} (${ZIGBEE_COMP}, ${LINUX_ARCH})"
 
-# Install slc-cli
-RUN ARCH_SLC=$(case "$(uname -m)" in \
-        x86_64)  echo "linux" ;; \
-        aarch64) echo "linux_arm64" ;; \
-        *)       echo "linux" ;; \
-    esac) && \
-    curl -fsSL "https://www.silabs.com/documents/login/software/slc_cli_${ARCH_SLC}.zip" -o /tmp/slc.zip && \
+# Install slc-cli (x86_64 only - QEMU handles ARM64 emulation)
+# Silicon Labs does not provide ARM64 native slc-cli
+RUN curl -fsSL "https://www.silabs.com/documents/login/software/slc_cli_linux.zip" -o /tmp/slc.zip && \
     unzip -q /tmp/slc.zip -d /opt && \
     rm /tmp/slc.zip && \
     chmod +x /opt/slc_cli/slc
