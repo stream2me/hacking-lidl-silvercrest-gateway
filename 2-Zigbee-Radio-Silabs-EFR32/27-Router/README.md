@@ -10,8 +10,9 @@ This firmware transforms the gateway into an autonomous Zigbee router that exten
 - **Auto-join** - Automatically joins open Zigbee networks via network steering
 - **Child support** - Up to 16 sleepy end-devices as children
 - **Source routing** - 50-entry route table for large networks
-- **Minimal footprint** - ~183KB flash (70KB margin on 256KB chip)
+- **Minimal footprint** - ~185KB flash (35KB margin on 256KB chip)
 - **NVM3 storage** - 36KB for network credentials and tokens
+- **Mini-CLI** - Bootloader access via `universal-silabs-flasher` (reflash support)
 
 ## Hardware
 
@@ -199,6 +200,28 @@ Check routing is working:
 
 ## Technical Details
 
+### Mini-CLI for Bootloader Access
+
+The firmware includes a lightweight CLI (only ~2KB) that allows reflashing without J-Link. Connect via serial (115200 baud) and type commands:
+
+| Command | Response | Description |
+|---------|----------|-------------|
+| `version` | `stack ver. [7.5.1.0]` | Show stack version |
+| `bootloader reboot` | Reboots | Enter Gecko bootloader |
+| `info` | Device info | Show firmware info |
+| `help` | Command list | Show available commands |
+
+**Usage with `universal-silabs-flasher`:**
+
+The flasher automatically detects the Router firmware and uses `bootloader reboot` to enter bootloader mode:
+```bash
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware new-firmware.gbl
+```
+
+This allows you to reflash the router without physical access, unlike NCP firmware where EZSP commands are used.
+
 ### ZCL Configuration
 
 | Endpoint | Profile | Clusters |
@@ -227,9 +250,9 @@ Check routing is working:
 
 ```
 Flash (256KB):
-├── Application     ~183KB
+├── Application     ~185KB
 ├── NVM3 Storage     36KB
-└── Free            ~37KB
+└── Free            ~35KB
 
 RAM (32KB):
 ├── Stack + Heap    ~16KB

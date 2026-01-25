@@ -6,14 +6,123 @@
  * - Automatically attempts to join an existing Zigbee network
  * - Routes messages between devices in the mesh
  * - Supports end devices as children
+ * - Provides minimal CLI for bootloader access (universal-silabs-flasher)
  ******************************************************************************/
 
 #include "app/framework/include/af.h"
 #include "app/framework/plugin/network-steering/network-steering.h"
+#include "sl_iostream.h"
+#include "api/btl_interface.h"
+#include <stdio.h>
+#include <string.h>
 
 // Event for delayed network steering start
 static sl_zigbee_event_t networkSteeringEventControl;
 static void networkSteeringEventHandler(sl_zigbee_event_t *event);
+
+// Mini-CLI for bootloader access
+#define CLI_BUFFER_SIZE 64
+static char cliBuffer[CLI_BUFFER_SIZE];
+static uint8_t cliBufferIndex = 0;
+
+// Event for CLI processing
+static sl_zigbee_event_t cliEventControl;
+static void cliEventHandler(sl_zigbee_event_t *event);
+
+/***************************************************************************//**
+ * Send string over UART
+ ******************************************************************************/
+static void cliPrint(const char *str)
+{
+  sl_iostream_write(sl_iostream_get_default(), str, strlen(str));
+}
+
+/***************************************************************************//**
+ * Process CLI command
+ ******************************************************************************/
+static void cliProcessCommand(void)
+{
+  // Null-terminate the buffer
+  cliBuffer[cliBufferIndex] = '\0';
+
+  // Strip trailing whitespace
+  while (cliBufferIndex > 0 &&
+         (cliBuffer[cliBufferIndex-1] == ' ' ||
+          cliBuffer[cliBufferIndex-1] == '\r' ||
+          cliBuffer[cliBufferIndex-1] == '\n')) {
+    cliBuffer[--cliBufferIndex] = '\0';
+  }
+
+  // Check for commands
+  if (cliBufferIndex == 0) {
+    // Empty command - just show prompt
+    cliPrint("> ");
+  } else if (strcmp(cliBuffer, "version") == 0) {
+    // Version command - format expected by universal-silabs-flasher
+    char versionStr[32];
+    snprintf(versionStr, sizeof(versionStr), "stack ver. [%d.%d.%d.0]\r\n> ",
+             EMBER_MAJOR_VERSION, EMBER_MINOR_VERSION, EMBER_PATCH_VERSION);
+    cliPrint(versionStr);
+  } else if (strcmp(cliBuffer, "bootloader reboot") == 0) {
+    // Reboot into bootloader
+    cliPrint("Rebooting...\r\n");
+    halCommonDelayMicroseconds(50000);  // 50ms for message to send
+    bootloader_rebootAndInstall();
+  } else if (strcmp(cliBuffer, "info") == 0) {
+    // Basic info
+    char infoStr[64];
+    snprintf(infoStr, sizeof(infoStr), "Zigbee Router - EmberZNet %d.%d.%d\r\n> ",
+             EMBER_MAJOR_VERSION, EMBER_MINOR_VERSION, EMBER_PATCH_VERSION);
+    cliPrint(infoStr);
+  } else if (strcmp(cliBuffer, "help") == 0) {
+    cliPrint("Commands:\r\n");
+    cliPrint("  version           - Show stack version\r\n");
+    cliPrint("  bootloader reboot - Enter bootloader\r\n");
+    cliPrint("  info              - Show device info\r\n");
+    cliPrint("  help              - Show this help\r\n");
+    cliPrint("> ");
+  } else {
+    cliPrint("Unknown command. Type 'help' for available commands.\r\n> ");
+  }
+
+  // Reset buffer
+  cliBufferIndex = 0;
+}
+
+/***************************************************************************//**
+ * CLI event handler - polls UART for incoming data
+ ******************************************************************************/
+static void cliEventHandler(sl_zigbee_event_t *event)
+{
+  sl_zigbee_event_set_inactive(event);
+
+  char c;
+  size_t bytesRead;
+  sl_status_t status;
+
+  // Read available characters
+  while (1) {
+    status = sl_iostream_read(sl_iostream_get_default(), &c, 1, &bytesRead);
+    if (status != SL_STATUS_OK || bytesRead == 0) {
+      break;
+    }
+
+    // Handle character
+    if (c == '\r' || c == '\n') {
+      cliProcessCommand();
+    } else if (c == '\b' || c == 0x7F) {
+      // Backspace
+      if (cliBufferIndex > 0) {
+        cliBufferIndex--;
+      }
+    } else if (cliBufferIndex < CLI_BUFFER_SIZE - 1) {
+      cliBuffer[cliBufferIndex++] = c;
+    }
+  }
+
+  // Schedule next poll (every 100ms)
+  sl_zigbee_event_set_delay_ms(event, 100);
+}
 
 /***************************************************************************//**
  * Application initialization callback
@@ -27,6 +136,10 @@ void emberAfMainInitCallback(void)
   // Schedule network steering to start after 3 seconds
   // This gives the stack time to fully initialize
   sl_zigbee_event_set_delay_ms(&networkSteeringEventControl, 3000);
+
+  // Initialize CLI event
+  sl_zigbee_event_init(&cliEventControl, cliEventHandler);
+  sl_zigbee_event_set_delay_ms(&cliEventControl, 500);
 }
 
 /***************************************************************************//**
