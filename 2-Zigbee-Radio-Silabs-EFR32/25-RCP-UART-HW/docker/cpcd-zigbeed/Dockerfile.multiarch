@@ -11,7 +11,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG CPCD_VERSION=v4.5.3
 ARG SIMPLICITY_SDK_VERSION=v2024.12.2
 
-# Install build dependencies
+# Install build dependencies (including Java 21 for slc-cli)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     libmbedtls-dev \
     python3 \
+    openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -77,10 +78,13 @@ ENV PATH="/opt/slc_cli:${PATH}"
 
 # Trust SDK and generate makefile
 RUN slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
-RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile -name=zigbeed --force 2>&1 | tail -10
 
-# Debug: show generated files
-RUN ls -la *.Makefile *.mak Makefile 2>/dev/null || echo "No Makefile found, listing all:" && ls -la
+# Debug: check Java and slc versions
+RUN java -version && slc --version
+
+# Generate makefile (show full output for debugging)
+RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile -name=zigbeed --force 2>&1; \
+    echo "=== Generated files ===" && ls -la
 
 # Fix SDK symlink
 RUN rm -rf simplicity_sdk_* && \
