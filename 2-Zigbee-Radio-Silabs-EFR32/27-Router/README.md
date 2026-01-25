@@ -45,6 +45,8 @@ A pre-built firmware is available in the `firmware/` directory. This is the quic
 
    The `-f` flag disables hardware flow control, allowing the flasher to reset the EFR32 into bootloader mode.
 
+   **Important:** Close all SSH sessions connected to the gateway before flashing. Active sessions with open connections to port 8888 (e.g., `nc`, previous flasher runs) can interfere with `universal-silabs-flasher`.
+
 ### Flash
 
 ```bash
@@ -121,6 +123,7 @@ configuration:
 **Via network (same as Option 1):**
 ```bash
 # On gateway: killall serialgateway && serialgateway -f
+# Important: close all SSH sessions before flashing !
 universal-silabs-flasher \
     --device socket://192.168.1.X:8888 \
     flash --firmware firmware/z3-router-7.5.1.gbl
@@ -281,6 +284,7 @@ nc 192.168.1.X 8888
 The flasher automatically detects the Router firmware and uses `bootloader reboot` to enter bootloader mode:
 ```bash
 # On gateway: killall serialgateway && serialgateway -f
+# Important: close all SSH sessions before flashing !
 universal-silabs-flasher \
     --device socket://192.168.1.X:8888 \
     flash --firmware new-firmware.gbl
