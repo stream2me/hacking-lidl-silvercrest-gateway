@@ -1,0 +1,52 @@
+# cpcd + zigbeed container for Lidl Silvercrest Gateway RCP
+# Based on official Silicon Labs multiprotocol image
+#
+# Architecture:
+#   TCP:8888 (gateway) -> socat -> cpcd -> zigbeed -> socat -> TCP:9999 (Z2M)
+
+FROM siliconlabsinc/multiprotocol:latest
+
+# The official image uses systemd - we replace with supervisord for simpler container usage
+# Official image already has cpcd and zigbeed in /usr/local/bin
+
+# Install our dependencies (socat for TCP bridging, supervisor for process management)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    socat \
+    supervisor \
+    netcat-openbsd \
+    gettext-base \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Disable systemd services (we use supervisord instead)
+RUN systemctl disable cpcd 2>/dev/null || true && \
+    systemctl disable zigbeed 2>/dev/null || true && \
+    systemctl disable otbr-agent 2>/dev/null || true && \
+    rm -f /etc/systemd/system/*.wants/* 2>/dev/null || true
+
+# Create directories
+RUN mkdir -p /etc/cpcd /var/lib/zigbeed /run/cpcd /var/log/supervisor
+
+# Copy configuration files
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY cpcd.conf.template /etc/cpcd/cpcd.conf.template
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Environment variables with defaults
+ENV RCP_HOST=192.168.1.1
+ENV RCP_PORT=8888
+ENV CPCD_INSTANCE=cpcd_0
+ENV UART_BAUDRATE=115200
+ENV ZIGBEED_PORT=9999
+ENV ZIGBEED_DEBUG=0
+
+# Expose port for Z2M connection
+EXPOSE 9999
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD nc -z localhost ${ZIGBEED_PORT} || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

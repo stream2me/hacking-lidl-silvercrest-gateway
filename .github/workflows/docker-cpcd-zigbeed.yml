@@ -56,7 +56,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: 2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/docker/cpcd-zigbeed
-          file: 2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/docker/cpcd-zigbeed/Dockerfile.multiarch
+          file: 2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/docker/cpcd-zigbeed/Dockerfile.silabs
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'workflow_dispatch' || inputs.push_image }}
           tags: ${{ steps.meta.outputs.tags }}
