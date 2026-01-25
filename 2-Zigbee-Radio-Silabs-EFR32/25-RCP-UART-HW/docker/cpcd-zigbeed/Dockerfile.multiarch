@@ -1,6 +1,11 @@
 # cpcd + zigbeed container for Lidl Silvercrest Gateway RCP
 # Multi-architecture build (amd64, arm64)
 #
+# Build strategy (like Nerivec):
+#   - Stage 1 (generator): x86_64 only - runs slc-cli to generate makefiles for all architectures
+#   - Stage 2 (builder): native on each arch - compiles cpcd and zigbeed
+#   - Stage 3 (runtime): minimal image with binaries
+#
 # Versions:
 #   - cpcd: v4.5.3 (from GitHub cpc-daemon)
 #   - zigbeed: EmberZNet 8.2.2 / EZSP 18 (from Simplicity SDK 2025.6.2)
@@ -8,11 +13,81 @@
 # Architecture:
 #   TCP:8888 (gateway) -> socat -> cpcd -> zigbeed -> socat -> TCP:9999 (Z2M)
 
+# ============================================================
+# Stage 1: Generator (x86_64 only)
+# Generates zigbeed project files for all target architectures
+# slc-cli is only available for x86_64
+# ============================================================
+FROM --platform=linux/amd64 ubuntu:24.04 AS generator
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG SIMPLICITY_SDK_VERSION=v2025.6.2
+
+# Install dependencies for slc-cli
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    unzip \
+    python3 \
+    openjdk-21-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Download Simplicity SDK
+RUN curl -fsSL -o /tmp/simplicity-sdk.zip \
+    "https://github.com/SiliconLabs/simplicity_sdk/releases/download/${SIMPLICITY_SDK_VERSION}/simplicity-sdk.zip" \
+    && mkdir -p /opt/simplicity_sdk \
+    && (unzip -q /tmp/simplicity-sdk.zip -d /opt/simplicity_sdk || true) \
+    && rm /tmp/simplicity-sdk.zip
+
+ENV SIMPLICITY_SDK=/opt/simplicity_sdk
+
+# Install slc-cli (x86_64 only)
+RUN curl -fsSL "https://www.silabs.com/documents/login/software/slc_cli_linux.zip" -o /tmp/slc.zip && \
+    unzip -q /tmp/slc.zip -d /opt && \
+    rm /tmp/slc.zip && \
+    chmod +x /opt/slc_cli/slc
+
+ENV PATH="/opt/slc_cli:${PATH}"
+
+# Trust SDK
+RUN slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
+
+# Generate zigbeed project for amd64
+WORKDIR /generated/amd64
+RUN cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.c . && \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.h . && \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed/zigbeed.slcp" .
+RUN slc generate zigbeed.slcp \
+    --sdk "${SIMPLICITY_SDK}" \
+    --with="zigbee_x86_64,linux_arch_64" \
+    --without=zigbee_recommended_linux_arch \
+    -o makefile \
+    --force 2>&1 | tail -5
+RUN rm -rf simplicity_sdk_* && ln -s "${SIMPLICITY_SDK}" simplicity_sdk_2025.6.2
+
+# Generate zigbeed project for arm64
+WORKDIR /generated/arm64
+RUN cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.c . && \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.h . && \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed/zigbeed.slcp" .
+RUN slc generate zigbeed.slcp \
+    --sdk "${SIMPLICITY_SDK}" \
+    --with="zigbee_arm64,linux_arch_64" \
+    --without=zigbee_recommended_linux_arch \
+    -o makefile \
+    --force 2>&1 | tail -5
+RUN rm -rf simplicity_sdk_* && ln -s "${SIMPLICITY_SDK}" simplicity_sdk_2025.6.2
+
+# ============================================================
+# Stage 2: Builder (multi-arch native compilation)
+# ============================================================
 FROM ubuntu:24.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CPCD_VERSION=v4.5.3
-ARG SIMPLICITY_SDK_VERSION=v2025.6.2
+ARG TARGETARCH
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,15 +98,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
     libmbedtls-dev \
-    python3 \
-    openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-# ============================================================
-# Build cpcd from GitHub (no SDK required)
-# ============================================================
+# Build cpcd from GitHub (native compilation)
 RUN git clone --depth 1 --branch ${CPCD_VERSION} https://github.com/SiliconLabs/cpc-daemon.git \
     && cd cpc-daemon \
     && mkdir build && cd build \
@@ -43,83 +114,16 @@ RUN git clone --depth 1 --branch ${CPCD_VERSION} https://github.com/SiliconLabs/
     && make install DESTDIR=/install \
     && ldconfig
 
-# ============================================================
-# Build zigbeed from Simplicity SDK
-# ============================================================
+# Copy SDK from generator (needed for headers and libs)
+COPY --from=generator /opt/simplicity_sdk /opt/simplicity_sdk
 
-# Download Simplicity SDK release (includes prebuilt libs, no git-lfs needed)
-# -d extracts directly into target dir (like Nerivec)
-# unzip returns exit code 1 for Unicode filename warnings - ignore with || true
-RUN curl -fsSL -o /tmp/simplicity-sdk.zip \
-    "https://github.com/SiliconLabs/simplicity_sdk/releases/download/${SIMPLICITY_SDK_VERSION}/simplicity-sdk.zip" \
-    && mkdir -p /opt/simplicity_sdk \
-    && (unzip -q /tmp/simplicity-sdk.zip -d /opt/simplicity_sdk || true) \
-    && rm /tmp/simplicity-sdk.zip
+# Copy generated zigbeed project for this architecture
+# TARGETARCH is 'amd64' or 'arm64'
+COPY --from=generator /generated/${TARGETARCH} /build/zigbeed
 
-ENV SIMPLICITY_SDK=/opt/simplicity_sdk
-
-# Detect architecture and set slc parameters
-# SDK lib paths: x86-64, arm64v8, arm32v7
-# slc --with: zigbee_x86_64, zigbee_arm64, zigbee_arm32 + linux_arch_32/64
-RUN ARCH=$(case "$(uname -m)" in \
-        x86_64)  echo "x86-64" ;; \
-        aarch64) echo "arm64v8" ;; \
-        armv7l)  echo "arm32v7" ;; \
-        *)       echo "x86-64" ;; \
-    esac) && \
-    ZIGBEE_COMP=$(case "$(uname -m)" in \
-        x86_64)  echo "zigbee_x86_64" ;; \
-        aarch64) echo "zigbee_arm64" ;; \
-        armv7l)  echo "zigbee_arm32" ;; \
-        *)       echo "zigbee_x86_64" ;; \
-    esac) && \
-    LINUX_ARCH=$(case "$(uname -m)" in \
-        armv7l)  echo "linux_arch_32" ;; \
-        *)       echo "linux_arch_64" ;; \
-    esac) && \
-    echo "${ARCH}" > /tmp/arch.txt && \
-    echo "${ZIGBEE_COMP}" > /tmp/zigbee_comp.txt && \
-    echo "${LINUX_ARCH}" > /tmp/linux_arch.txt && \
-    echo "Building for: ${ARCH} (${ZIGBEE_COMP}, ${LINUX_ARCH})"
-
-# Install slc-cli (x86_64 only - QEMU handles ARM64 emulation)
-# Silicon Labs does not provide ARM64 native slc-cli
-RUN curl -fsSL "https://www.silabs.com/documents/login/software/slc_cli_linux.zip" -o /tmp/slc.zip && \
-    unzip -q /tmp/slc.zip -d /opt && \
-    rm /tmp/slc.zip && \
-    chmod +x /opt/slc_cli/slc
-
-ENV PATH="/opt/slc_cli:${PATH}"
-
-# Build zigbeed
 WORKDIR /build/zigbeed
 
-# Copy zigbeed sample sources from SDK
-RUN cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.c . && \
-    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.h . && \
-    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed/zigbeed.slcp" .
-
-# Trust SDK
-RUN slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
-
-# Generate makefile with correct architecture components (like Nerivec)
-# --with selects architecture-specific libraries
-# --without prevents slc from auto-selecting wrong architecture
-RUN ZIGBEE_COMP=$(cat /tmp/zigbee_comp.txt) && \
-    LINUX_ARCH=$(cat /tmp/linux_arch.txt) && \
-    echo "=== slc generate with ${ZIGBEE_COMP},${LINUX_ARCH} ===" && \
-    slc generate zigbeed.slcp \
-        --sdk "${SIMPLICITY_SDK}" \
-        --with="${ZIGBEE_COMP},${LINUX_ARCH}" \
-        --without=zigbee_recommended_linux_arch \
-        -o makefile \
-        --force 2>&1 | tail -10
-
-# Replace partial SDK copy with symlink (slc copies some files, but not all headers)
-RUN rm -rf simplicity_sdk_* && \
-    ln -s "${SIMPLICITY_SDK}" simplicity_sdk_2025.6.2
-
-# Build zigbeed
+# Build zigbeed (native compilation)
 RUN make -f zigbeed.Makefile -j$(nproc)
 
 # Install to staging directory
@@ -128,7 +132,7 @@ RUN mkdir -p /install/usr/local/bin && \
     chmod +x /install/usr/local/bin/zigbeed
 
 # ============================================================
-# Runtime image
+# Stage 3: Runtime image
 # ============================================================
 FROM ubuntu:24.04
 
