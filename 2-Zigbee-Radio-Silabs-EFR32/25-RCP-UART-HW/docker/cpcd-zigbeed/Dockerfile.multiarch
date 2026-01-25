@@ -128,7 +128,7 @@ RUN make -f zigbeed.Makefile -j$(nproc)
 
 # Install to staging directory
 RUN mkdir -p /install/usr/local/bin && \
-    cp build/build/debug/zigbeed /install/usr/local/bin/ && \
+    cp build/debug/zigbeed /install/usr/local/bin/ && \
     chmod +x /install/usr/local/bin/zigbeed
 
 # ============================================================

@@ -52,17 +52,22 @@ The script auto-detects your architecture and patches the Makefile accordingly.
 ## How It Works
 
 1. **Download SDK** from GitHub if not present (shallow clone, ~1.5 GB)
-2. **Generate project** using `slc generate` from the SDK sample
+2. **Generate project** using `slc generate` with architecture-specific components
 3. **Replace SDK copy** with symlink (slc copies partial headers)
-4. **Fix architecture** in library paths (slc defaults to arm64v8)
-5. **Build** using the generated Makefile
-6. **Install** to `/usr/local/bin/`
+4. **Build** using the generated Makefile
+5. **Install** to `/usr/local/bin/`
 
-### Key differences from Gecko SDK build
+### slc generate command
 
-- Sample location: `protocol/zigbee/app/projects/zigbeed/` (not `app/zigbeed/`)
-- slc generates library references but with wrong architecture
-- Partial SDK copy must be replaced with full symlink for headers
+The script uses the same approach as [Nerivec's multiprotocol-builder](https://github.com/Nerivec/silabs-multiprotocol-builder):
+
+```bash
+slc generate zigbeed.slcp \
+    --with=zigbee_x86_64,linux_arch_64 \
+    --without=zigbee_recommended_linux_arch
+```
+
+The `--with` parameter tells slc to include architecture-specific libraries automatically.
 
 ## Usage
 
@@ -103,7 +108,10 @@ pkill zigbeed
 ```
 
 ### Wrong architecture libraries
-The script fixes this automatically. If you still see errors about `arm64v8` on x86_64, check that the sed commands ran correctly.
+The `--with` parameter ensures correct architecture. If you still see errors, verify your architecture detection:
+```bash
+uname -m  # Should be x86_64, aarch64, or armv7l
+```
 
 ### Missing headers (sl_slist.h, etc.)
 The SDK symlink must point to the full SDK, not a partial copy. The script handles this by removing the slc-generated partial copy and creating a symlink.

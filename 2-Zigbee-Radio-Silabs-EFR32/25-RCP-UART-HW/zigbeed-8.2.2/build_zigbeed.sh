@@ -76,26 +76,37 @@ if ! ldconfig -p 2>/dev/null | grep -q libcpc; then
 fi
 
 # =========================================
-# Detect architecture
+# Detect architecture and set slc parameters
 # =========================================
 case "$(uname -m)" in
-    x86_64)  ARCH="x86-64" ;;
-    aarch64) ARCH="arm64v8" ;;
-    armv7l)  ARCH="arm32v7" ;;
-    i686)    ARCH="i386" ;;
+    x86_64)
+        ARCH="x86-64"
+        ZIGBEE_COMP="zigbee_x86_64"
+        LINUX_ARCH="linux_arch_64"
+        ;;
+    aarch64)
+        ARCH="arm64v8"
+        ZIGBEE_COMP="zigbee_arm64"
+        LINUX_ARCH="linux_arch_64"
+        ;;
+    armv7l)
+        ARCH="arm32v7"
+        ZIGBEE_COMP="zigbee_arm32"
+        LINUX_ARCH="linux_arch_32"
+        ;;
     *)
         echo "ERROR: Unsupported architecture: $(uname -m)"
         exit 1
         ;;
 esac
 
-echo "Target libs: ${ARCH}"
+echo "Target: ${ARCH} (${ZIGBEE_COMP}, ${LINUX_ARCH})"
 
 # =========================================
 # Generate project
 # =========================================
 echo ""
-echo "[1/3] Generating project..."
+echo "[1/2] Generating project..."
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
@@ -106,72 +117,30 @@ cp "${ZIGBEED_SAMPLE}"/*.c .
 cp "${ZIGBEED_SAMPLE}"/*.h .
 cp "${ZIGBEED_SAMPLE}/zigbeed.slcp" .
 
-# Trust SDK and generate
+# Trust SDK
 slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
-slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile --force 2>&1 | tail -3
+
+# Generate with correct architecture components (like Nerivec)
+# --with selects architecture-specific libraries automatically
+# --without prevents slc from auto-selecting wrong architecture
+slc generate zigbeed.slcp \
+    --sdk "${SIMPLICITY_SDK}" \
+    --with="${ZIGBEE_COMP},${LINUX_ARCH}" \
+    --without=zigbee_recommended_linux_arch \
+    -o makefile \
+    --force 2>&1 | tail -5
 
 # Replace partial SDK copy with symlink (slc copies some files, but not all headers)
 rm -rf simplicity_sdk_2025.6.2
 ln -s "${SIMPLICITY_SDK}" simplicity_sdk_2025.6.2
 
 # =========================================
-# Patch Makefile
-# =========================================
-echo ""
-echo "[2/3] Patching Makefile..."
-
-MAKEFILE="zigbeed.Makefile"
-PROJECT_MAK="zigbeed.project.mak"
-
-# Fix architecture in slc-generated library paths (slc defaults to arm64v8)
-sed -i "s|/gcc/arm64v8/|/gcc/${ARCH}/|g" "${PROJECT_MAK}"
-sed -i "s|/gcc/x86-64/|/gcc/${ARCH}/|g" "${PROJECT_MAK}"
-sed -i "s|/gcc/arm32v7/|/gcc/${ARCH}/|g" "${PROJECT_MAK}"
-sed -i "s|/gcc/i386/|/gcc/${ARCH}/|g" "${PROJECT_MAK}"
-echo "  Fixed library paths to ${ARCH}"
-
-# Create libs patch file (additional libraries not included by slc)
-cat > libs_patch.mak << ENDPATCH
-####################################################################
-# Prebuilt Zigbee libraries (architecture: ${ARCH})
-####################################################################
-ZIGBEE_LIB_PATH = \$(SDK_PATH)/protocol/zigbee/build/gcc/${ARCH}
-
-LIBS += \\
-  \$(ZIGBEE_LIB_PATH)/ncp-cbke-library/release_singlenetwork/libncp-cbke-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-gp-library/release_singlenetwork/libncp-gp-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-mfglib-library/release_singlenetwork/libncp-mfglib-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-pro-library/release_singlenetwork/libncp-pro-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-source-route-library/release_singlenetwork/libncp-source-route-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-zll-library/release_singlenetwork/libncp-zll-library.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-cbke-core/release_singlenetwork/libzigbee-cbke-core.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-dynamic-commissioning/release_singlenetwork/libzigbee-dynamic-commissioning.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-gp/release_singlenetwork/libzigbee-gp.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-mfglib/release_singlenetwork/libzigbee-mfglib.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-ncp-uart/release_singlenetwork/libzigbee-ncp-uart.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-pro-stack/release_singlenetwork/libzigbee-pro-stack.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-pro-stack-mac-test-cmds/release_singlenetwork/libzigbee-pro-stack-mac-test-cmds.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-r22-support/release_singlenetwork/libzigbee-r22-support.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-r23-support/release_singlenetwork/libzigbee-r23-support.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-source-route/release_singlenetwork/libzigbee-source-route.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-xncp/release_singlenetwork/libzigbee-xncp.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-zll/release_singlenetwork/libzigbee-zll.a
-ENDPATCH
-
-# Insert patch after "-include zigbeed.project.mak" line
-awk '/-include zigbeed.project.mak/{print; system("cat libs_patch.mak"); next}1' "${MAKEFILE}" > "${MAKEFILE}.tmp"
-mv "${MAKEFILE}.tmp" "${MAKEFILE}"
-rm libs_patch.mak
-
-echo "  Added 18 prebuilt libraries for ${ARCH}"
-
-# =========================================
 # Build
 # =========================================
 echo ""
-echo "[3/3] Building..."
+echo "[2/2] Building..."
 
-make -f "${MAKEFILE}" -j$(nproc)
+make -f zigbeed.Makefile -j$(nproc)
 
 # =========================================
 # Install
