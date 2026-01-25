@@ -11,18 +11,20 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG CPCD_VERSION=v4.5.3
 ARG SIMPLICITY_SDK_VERSION=v2024.12.2
 
-# Install build dependencies (including Java 21 for slc-cli)
+# Install build dependencies (including Java 21 for slc-cli, git-lfs for SDK libraries)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     git \
+    git-lfs \
     ca-certificates \
     curl \
     unzip \
     libmbedtls-dev \
     python3 \
     openjdk-21-jre-headless \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && git lfs install
 
 WORKDIR /build
 
@@ -38,10 +40,12 @@ RUN git clone --depth 1 --branch ${CPCD_VERSION} https://github.com/SiliconLabs/
     && make install DESTDIR=/install \
     && ldconfig
 
-# Clone Simplicity SDK
+# Clone Simplicity SDK with LFS files (prebuilt Zigbee libraries)
 RUN git clone --depth 1 --branch ${SIMPLICITY_SDK_VERSION} \
     https://github.com/SiliconLabs/simplicity_sdk.git \
-    /opt/simplicity_sdk
+    /opt/simplicity_sdk \
+    && cd /opt/simplicity_sdk \
+    && git lfs pull --include="protocol/zigbee/build/**"
 
 ENV SIMPLICITY_SDK=/opt/simplicity_sdk
 
