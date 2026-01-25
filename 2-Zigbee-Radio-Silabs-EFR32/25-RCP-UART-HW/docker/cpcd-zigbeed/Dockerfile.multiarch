@@ -46,9 +46,9 @@ RUN git clone --depth 1 --branch ${SIMPLICITY_SDK_VERSION} \
     /opt/simplicity_sdk \
     && cd /opt/simplicity_sdk \
     && git lfs pull --include="protocol/zigbee/build/**" \
-    && echo "=== Checking Zigbee libs ===" \
-    && ls -la protocol/zigbee/build/gcc/ 2>/dev/null || echo "No gcc dir" \
-    && find protocol/zigbee/build -name "*.a" 2>/dev/null | head -20 || echo "No .a files found"
+    && echo "=== Checking Zigbee libs for x86-64 ===" \
+    && ls protocol/zigbee/build/gcc/x86-64/ 2>/dev/null || echo "No x86-64 dir" \
+    && find protocol/zigbee/build/gcc/x86-64 -name "*.a" 2>/dev/null | head -30 || echo "No .a files"
 
 ENV SIMPLICITY_SDK=/opt/simplicity_sdk
 
