@@ -1,12 +1,20 @@
-# OpenThread RCP Firmware with zigbee-on-host
+# OpenThread RCP Firmware for Lidl Silvercrest Gateway
 
-OpenThread Radio Co-Processor (RCP) firmware for the EFR32MG1B232F256GM48.
-For **Zigbee** (via zigbee-on-host) or **Thread/Matter** networks.
+OpenThread Radio Co-Processor (RCP) firmware for the EFR32MG1B232F256GM48 chip found in the Lidl Silvercrest Smart Home Gateway.
 
-## zigbee-on-host
+This firmware transforms the gateway into an **OpenThread RCP** that works with **zigbee-on-host** (for Zigbee) or **Thread/Matter** networks.
 
-This firmware works with [**zigbee-on-host**](https://github.com/Nerivec/zigbee-on-host),
-an amazing open-source Zigbee stack developed by [@Nerivec](https://github.com/Nerivec).
+## Features
+
+- **OpenThread RCP** - Spinel/HDLC protocol over UART
+- **zigbee-on-host compatible** - Works with Zigbee2MQTT 2.x `zoh` adapter
+- **Thread/Matter ready** - Can be used for Thread border routers
+- **Hardware radio acceleration** - All MAC operations in hardware
+- **Minimal footprint** - ~100KB flash, ~16KB RAM
+
+## About zigbee-on-host
+
+This firmware works with [**zigbee-on-host**](https://github.com/Nerivec/zigbee-on-host), an open-source Zigbee stack developed by [@Nerivec](https://github.com/Nerivec).
 
 Unlike proprietary solutions like Silicon Labs' zigbeed, zigbee-on-host is:
 - **Fully open-source** - transparent, auditable, community-driven
@@ -15,18 +23,120 @@ Unlike proprietary solutions like Silicon Labs' zigbeed, zigbee-on-host is:
 
 > **Note:** zigbee-on-host is still under active development. Check the
 > [GitHub repository](https://github.com/Nerivec/zigbee-on-host) for the latest
-> updates, known issues, and to report bugs or contribute.
+> updates, known issues, and to report bugs.
 
-## Architecture
+## Hardware
+
+| Component | Specification |
+|-----------|---------------|
+| Zigbee SoC | EFR32MG1B232F256GM48 |
+| Flash | 256KB |
+| RAM | 32KB |
+| Radio | 2.4GHz IEEE 802.15.4 |
+| UART | PA0 (TX), PA1 (RX), PA4 (RTS), PA5 (CTS) @ 115200 baud |
+
+---
+
+## Option 1: Flash Pre-built Firmware (Recommended)
+
+A pre-built firmware is available in the `firmware/` directory. This is the quickest way to get started.
+
+### Prerequisites
+
+1. **Install universal-silabs-flasher** (see [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/) for details)
+
+2. **Restart serialgateway with `-f` flag:**
+
+   On the gateway via SSH:
+   ```bash
+   killall serialgateway && serialgateway -f
+   ```
+
+   **Important:** Close all SSH sessions connected to the gateway before flashing.
+
+### Flash
+
+```bash
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/ot-rcp.gbl
+```
+
+### After flashing
+
+Reboot the gateway to restore normal serialgateway operation:
+```bash
+reboot
+```
+
+---
+
+## Option 2: Build from Source
+
+For users who want to customize the firmware or use a different SDK version.
+
+### Prerequisites
+
+Install Silicon Labs tools (see `1-Build-Environment/12-silabs-toolchain/`):
+
+```bash
+cd 1-Build-Environment/12-silabs-toolchain
+./install_silabs.sh
+```
+
+This installs:
+- `slc-cli` - Silicon Labs Configurator
+- `arm-none-eabi-gcc` - ARM GCC toolchain
+- `commander` - Simplicity Commander
+- Gecko SDK with OpenThread
+
+### Build
+
+```bash
+cd 2-Zigbee-Radio-Silabs-EFR32/26-OT-RCP
+./build_ot_rcp.sh
+```
+
+### Output
+
+```
+firmware/
+├── ot-rcp.gbl   # For UART/Xmodem flashing
+└── ot-rcp.s37   # For J-Link/SWD flashing
+```
+
+### Flash
+
+**Via network (same as Option 1):**
+```bash
+# On gateway: killall serialgateway && serialgateway -f
+# Important: close all SSH sessions before flashing!
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/ot-rcp.gbl
+# Then reboot gateway
+```
+
+**Via J-Link/SWD** (if you have physical access to the SWD pads):
+```bash
+commander flash firmware/ot-rcp.s37 \
+    --device EFR32MG1B232F256GM48
+```
+
+---
+
+## Usage
+
+### Architecture
 
 ```
 +-------------------+    UART     +-------------------+   Ethernet   +---------------------+
 |  EFR32MG1B (RCP)  |   115200    |  RTL8196E         |    TCP/IP    |  Host (x86/ARM)     |
 |                   |    baud     |  (Gateway SoC)    |              |                     |
 |  802.15.4 PHY/MAC |<----------->|                   |<------------>|  Zigbee2MQTT        |
-|  + Spinel/HDLC    |   ttyS0     |  serialgateway    |   port 8888  |    + zoh adapter    |
-|                   |     <->     |  (serial->TCP)    |              |                     |
-|  OpenThread 2.4.7 |   ttyS1     |                   |              |  zigbee-on-host     |
+|  + Spinel/HDLC    |   ttyS1     |  serialgateway    |   port 8888  |    + zoh adapter    |
+|                   |             |  (serial->TCP)    |              |                     |
+|  OpenThread 2.4.7 |             |                   |              |  zigbee-on-host     |
 |  HW Flow Control  |             |                   |              |  (Zigbee stack)     |
 +-------------------+             +-------------------+              +---------------------+
 ```
@@ -34,71 +144,37 @@ Unlike proprietary solutions like Silicon Labs' zigbeed, zigbee-on-host is:
 The RTL8196E runs `serialgateway` to bridge the EFR32's UART to TCP port 8888.
 See [34-Userdata](../../3-Main-SoC-Realtek-RTL8196E/34-Userdata/) for gateway setup.
 
-## Zigbee2MQTT Configuration
+### Zigbee2MQTT Configuration
 
 Edit `configuration.yaml`:
 
 ```yaml
 serial:
-  port: tcp://192.168.1.xxx:8888
+  port: tcp://192.168.1.X:8888
   adapter: zoh
   baudrate: 115200
 ```
 
 **Tested devices:** Xiaomi LYWSD03MMC (temperature/humidity sensor)
 
-## Build
+---
 
-### Prerequisites
+## Technical Details
 
-- GSDK 4.5.0 (Gecko SDK)
-- slc-cli (Silicon Labs Configurator)
-- ARM GCC toolchain (12.x recommended)
-
-### Build Commands
-
-```bash
-./build_ot_rcp.sh
-```
-
-### Output Files
-
-| File | Use |
-|------|-----|
-| `firmware/ot-rcp.gbl` | Flash via UART/Xmodem |
-| `firmware/ot-rcp.s37` | Flash via J-Link/SWD |
-
-## Flashing
-
-Via J-Link/SWD (tested):
-
-```bash
-commander flash firmware/ot-rcp.gbl --device EFR32MG1B232F256GM48
-```
-
-## Hardware Pinout
-
-| Signal | Pin | Function |
-|--------|-----|----------|
-| TX | PA0 | USART0 TX |
-| RX | PA1 | USART0 RX |
-| RTS | PA4 | Flow Control |
-| CTS | PA5 | Flow Control |
-
-**UART:** 115200 baud, 8N1, Hardware Flow Control (required)
-
-## Features
-
-- **RTL8196E Boot Delay:** 1-second delay for host UART initialization
-- **Hardware Flow Control:** RTS/CTS required for reliable TCP operation
-- **Hardware Radio Acceleration:** All MAC operations in hardware
-
-## Memory Usage
+### Memory Usage
 
 | Resource | Used | Available |
 |----------|------|-----------|
 | Flash | ~100 KB | 256 KB |
 | RAM | ~16 KB | 32 KB |
+
+### Features
+
+- **RTL8196E Boot Delay:** 1-second delay for host UART initialization
+- **Hardware Flow Control:** RTS/CTS required for reliable TCP operation
+- **Hardware Radio Acceleration:** All MAC operations in hardware
+
+---
 
 ## Troubleshooting
 
@@ -119,18 +195,30 @@ commander flash firmware/ot-rcp.gbl --device EFR32MG1B232F256GM48
 1. Factory reset the device (hold button while inserting battery)
 2. Ensure permit join is enabled in Z2M
 
-## Project Structure
+---
+
+## Files
 
 ```
 26-OT-RCP/
 ├── build_ot_rcp.sh              # Build script
-├── README.md
+├── README.md                    # This file
 ├── patches/
 │   ├── ot-rcp.slcp              # Project config (based on SDK sample)
 │   ├── main.c                   # Entry point (RTL8196E boot delay)
 │   └── sl_uartdrv_usart_vcom_config.h
 └── firmware/                    # Output (generated)
+    ├── ot-rcp.gbl               # For UART flashing
+    └── ot-rcp.s37               # For SWD flashing
 ```
+
+---
+
+## Related Projects
+
+- `24-NCP-UART-HW/` - NCP firmware (EZSP protocol)
+- `25-RCP-UART-HW/` - RCP firmware (CPC protocol, for cpcd + zigbeed)
+- `27-Router/` - Autonomous Zigbee router (no host needed)
 
 ## References
 
