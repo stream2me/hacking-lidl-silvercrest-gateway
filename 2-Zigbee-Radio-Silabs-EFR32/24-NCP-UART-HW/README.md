@@ -1,111 +1,168 @@
-# NCP-UART-HW Firmware
+# NCP-UART-HW Firmware for Lidl Silvercrest Gateway
 
-Network Co-Processor (NCP) firmware for the **Silabs EFR32MG1B232F256GM48** Zigbee chip in the Lidl Silvercrest Gateway.
+Network Co-Processor (NCP) firmware for the EFR32MG1B232F256GM48 chip found in the Lidl Silvercrest Smart Home Gateway.
 
 This firmware enables communication with Zigbee coordinators like **Zigbee2MQTT** and **Home Assistant ZHA** via EZSP (EmberZNet Serial Protocol).
 
+## Features
+
+- **EZSP v13** - EmberZNet 7.5.1 serial protocol
+- **Zigbee PRO R22** - Full Zigbee 3.0 support
+- **Green Power** - Support for battery-free devices
+- **Source routing** - 100-entry route table for large networks
+- **Up to 32 children** - Sleepy end-devices supported
+- **Hardware flow control** - RTS/CTS for reliable TCP operation
+
+## Hardware
+
+| Component | Specification |
+|-----------|---------------|
+| Zigbee SoC | EFR32MG1B232F256GM48 |
+| Flash | 256KB |
+| RAM | 32KB |
+| Radio | 2.4GHz IEEE 802.15.4 |
+| UART | PA0 (TX), PA1 (RX), PA4 (RTS), PA5 (CTS) @ 115200 baud |
+
 ---
 
-## Quick Start
+## Option 1: Flash Pre-built Firmware (Recommended)
 
-### Choose Your Path
+Pre-built firmware files are available in the `firmware/` directory. This is the quickest way to get started.
 
-| | Option 1: Flash Pre-built | Option 2: Build from Source |
-|---|---|---|
-| **For** | Most users | Developers / Hackers |
-| **Time** | ~5 minutes | ~10 minutes |
-| **Requires** | Gateway with bootloader | Docker or Ubuntu 22.04 |
-| **Use case** | Just want a working Zigbee bridge | Customize network parameters |
+### Available Firmware Files
 
----
+| File | Description |
+|------|-------------|
+| `ncp-uart-hw-7.5.1.gbl` | For UART/TCP flashing via universal-silabs-flasher |
 
-## Option 1: Flash Pre-built Firmware
+> **Need other formats (.s37, .hex, .bin)?** Build from source (Option 2), they will be in `build/debug/`.
 
-**Pre-built firmware files are ready to flash.** No compilation needed.
+### Prerequisites
 
-### Pre-built Firmware Files
+1. **Install universal-silabs-flasher** (see [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/) for details)
 
-Located in the [`firmware/`](./firmware/) directory:
+2. **Restart serialgateway with `-f` flag:**
 
-| File | EZSP Version | EmberZNet | Description |
-|------|--------------|-----------|-------------|
-| `ncp-uart-hw-7.5.1.gbl` | 13 | 7.5.1 | For UART/Xmodem flashing |
-| `ncp-uart-hw-7.5.1.s37` | 13 | 7.5.1 | For J-Link/SWD flashing |
-| `ncp-uart-hw-7.5.1.hex` | 13 | 7.5.1 | Intel HEX format |
-| `ncp-uart-hw-7.5.1.bin` | 13 | 7.5.1 | Raw binary |
+   On the gateway via SSH:
+   ```bash
+   killall serialgateway && serialgateway -f
+   ```
 
-### Flashing Instructions
+   **Important:** Close all SSH sessions connected to the gateway before flashing.
 
-Two methods are available. See [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/) for detailed instructions.
+### Flash
 
-**Via J-Link/SWD** (requires debug probe):
 ```bash
-commander flash ./firmware/ncp-uart-hw-7.5.1.s37 --device EFR32MG1B232F256GM48
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/ncp-uart-hw-7.5.1.gbl
 ```
 
-**Via TCP/serialgateway** (no hardware access needed):
-```bash
-# On the gateway: restart serialgateway without HW flow control
-killall serialgateway && serialgateway -f &
+### After flashing
 
-# On your PC: flash the firmware
-universal-silabs-flasher --device socket://GATEWAY_IP:8888 flash --firmware ./firmware/ncp-uart-hw-7.5.1.gbl
+Reboot the gateway to restore normal serialgateway operation:
+```bash
+reboot
 ```
 
 ---
 
 ## Option 2: Build from Source
 
-**For developers who want to customize network parameters or add features.**
+For users who want to customize network parameters or use a different EmberZNet version.
 
 ### Prerequisites
 
-First, set up the build environment. See [1-Build-Environment](../../1-Build-Environment/) for detailed instructions.
+Install Silicon Labs tools (see `1-Build-Environment/12-silabs-toolchain/`):
 
-### Build with Docker (slc-cli)
+```bash
+cd 1-Build-Environment/12-silabs-toolchain
+./install_silabs.sh
+```
 
-From the project root directory (e.g. `hacking-lidl-silvercrest-gateway`):
+Or use Docker (see `1-Build-Environment/` for setup):
 
 ```bash
 docker run --rm -v $(pwd):/workspace lidl-gateway-builder \
     /workspace/2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW/build_ncp.sh
 ```
 
-Or interactively:
+### Build
 
 ```bash
-docker run -it --rm -v $(pwd):/workspace lidl-gateway-builder
-cd /workspace/2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW
-./build_ncp.sh
-```
-
-### Build Natively (Ubuntu 22.04 / WSL2)
-
-```bash
-# Install build environment (one-time, ~45 min)
-cd 1-Build-Environment
-sudo ./install_deps.sh
-
-# Build
 cd 2-Zigbee-Radio-Silabs-EFR32/24-NCP-UART-HW
 ./build_ncp.sh
 ```
 
-### Build Output (in both cases)
+### Output
 
 ```
 firmware/
-├── ncp-uart-hw.gbl   # For UART/Xmodem flashing
-├── ncp-uart-hw.s37   # For J-Link/SWD flashing
-├── ncp-uart-hw.hex   # Intel HEX format
-└── ncp-uart-hw.bin   # Raw binary
+└── ncp-uart-hw.gbl   # For UART flashing (via universal-silabs-flasher)
 ```
 
-### Clean Build
+> **Other formats (.s37, .hex, .bin)** are available in `build/debug/` after compilation. Use these for J-Link/SWD flashing or debugging.
+
+### Clean
 
 ```bash
 ./build_ncp.sh clean
 ```
+
+### Flash
+
+**Via network (same as Option 1):**
+```bash
+# On gateway: killall serialgateway && serialgateway -f
+# Important: close all SSH sessions before flashing!
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/ncp-uart-hw.gbl
+# Then reboot gateway
+```
+
+**Via J-Link/SWD** (if you have physical access to the SWD pads):
+```bash
+commander flash firmware/ncp-uart-hw.gbl \
+    --device EFR32MG1B232F256GM48
+```
+
+---
+
+## Usage
+
+### Architecture
+
+```
++-------------------+    UART     +-------------------+   Ethernet   +---------------------+
+|  EFR32MG1B (NCP)  |   115200    |  RTL8196E         |    TCP/IP    |  Host (x86/ARM)     |
+|                   |    baud     |  (Gateway SoC)    |              |                     |
+|  EmberZNet Stack  |<----------->|                   |<------------>|  Zigbee2MQTT        |
+|  + EZSP Protocol  |   ttyS1     |  serialgateway    |   port 8888  |       or            |
+|                   |             |  (serial->TCP)    |              |  Home Assistant ZHA |
+|  HW Flow Control  |             |                   |              |                     |
++-------------------+             +-------------------+              +---------------------+
+```
+
+The RTL8196E runs `serialgateway` to bridge the EFR32's UART to TCP port 8888.
+See [34-Userdata](../../3-Main-SoC-Realtek-RTL8196E/34-Userdata/) for gateway setup.
+
+### Zigbee2MQTT Configuration
+
+Edit `configuration.yaml`:
+
+```yaml
+serial:
+  port: tcp://192.168.1.X:8888
+  adapter: ember
+```
+
+### Home Assistant ZHA Configuration
+
+Add integration with:
+- **Serial port path:** `socket://192.168.1.X:8888`
+
+> **Note:** Baudrate and flow control are handled by `serialgateway` on the gateway side, not by the client application.
 
 ---
 
@@ -115,53 +172,28 @@ The build process applies patches to optimize the firmware for the Lidl Gateway.
 
 ### Network Parameters
 
-Edit `patches/apply_config.sh` to modify. For a **complete guide** on network sizing, see the [Zigbee Network Sizing Guide](https://github.com/jnilo1/slc-projects/blob/main/ncp-uart-hw/ZIGBEE_NETWORK_SIZING_GUIDE.md).
+Edit `patches/apply_config.sh` to modify. For a complete guide, see the [Zigbee Network Sizing Guide](https://github.com/jnilo1/slc-projects/blob/main/ncp-uart-hw/ZIGBEE_NETWORK_SIZING_GUIDE.md).
 
-#### Quick Reference
+| Parameter | Default | Range | RAM/Entry |
+|-----------|---------|-------|-----------|
+| `EMBER_MAX_END_DEVICE_CHILDREN` | 32 | 0-64 | ~40 bytes |
+| `EMBER_PACKET_BUFFER_COUNT` | 255 | 20-255 | ~36 bytes |
+| `EMBER_SOURCE_ROUTE_TABLE_SIZE` | 100 | 2-255 | ~12 bytes |
+| `EMBER_BINDING_TABLE_SIZE` | 32 | 1-127 | ~20 bytes |
+| `EMBER_ADDRESS_TABLE_SIZE` | 12 | 1-256 | ~16 bytes |
+| `EMBER_NEIGHBOR_TABLE_SIZE` | 26 | 16/26 | ~32 bytes |
+| `EMBER_KEY_TABLE_SIZE` | 12 | 1-127 | ~32 bytes |
 
-| Parameter | File | Default | Range | RAM/Entry |
-|-----------|------|---------|-------|-----------|
-| `EMBER_MAX_END_DEVICE_CHILDREN` | sl_zigbee_pro_stack_config.h | 32 | 0-64 | ~40 bytes |
-| `EMBER_PACKET_BUFFER_COUNT` | sl_zigbee_pro_stack_config.h | 255 | 20-255 | ~36 bytes |
-| `EMBER_SOURCE_ROUTE_TABLE_SIZE` | sl_zigbee_source_route_config.h | 100 | 2-255 | ~12 bytes |
-| `EMBER_BINDING_TABLE_SIZE` | sl_zigbee_pro_stack_config.h | 32 | 1-127 | ~20 bytes |
-| `EMBER_ADDRESS_TABLE_SIZE` | sl_zigbee_pro_stack_config.h | 12 | 1-256 | ~16 bytes |
-| `EMBER_NEIGHBOR_TABLE_SIZE` | sl_zigbee_pro_stack_config.h | 26 | 16/26 | ~32 bytes |
-| `EMBER_KEY_TABLE_SIZE` | sl_zigbee_security_link_keys_config.h | 12 | 1-127 | ~32 bytes |
-| `EMBER_APS_UNICAST_MESSAGE_COUNT` | sl_zigbee_pro_stack_config.h | 32 | 1-255 | ~24 bytes |
-| `NVM3_DEFAULT_NVM_SIZE` | nvm3_default_config.h | 36864 | — | N/A |
+### Network Size Presets
 
-#### Network Size Presets
+| Preset | Devices | Children | Buffers | Routes | Bindings |
+|--------|---------|----------|---------|--------|----------|
+| **Small** | <20 | 10 | 75 | 20 | 10 |
+| **Medium** | 20-50 | 20 | 150 | 50 | 20 |
+| **Large** (default) | 50-100 | 32 | 255 | 100 | 32 |
+| **Very Large** | 100-150 | 48 | 255 | 150 | 48 |
 
-| Preset | Devices | Children | Buffers | Routes | Bindings | NVM3 |
-|--------|---------|----------|---------|--------|----------|------|
-| **Small** | <20 | 10 | 75 | 20 | 10 | 20KB |
-| **Medium** | 20-50 | 20 | 150 | 50 | 20 | 28KB |
-| **Large** (default) | 50-100 | 32 | 255 | 100 | 32 | 36KB |
-| **Very Large** | 100-150 | 48 | 255 | 150 | 48 | 40KB |
-
-#### RAM Budget
-
-The EFR32MG1B has only **32KB RAM**. Current configuration uses ~27KB, leaving ~5KB headroom.
-
-```
-RAM ≈ Base (~12KB) + Children×40 + Buffers×36 + Routes×12 + Bindings×20 + ...
-```
-
-> **Warning**: Increasing parameters beyond presets may cause instability due to RAM overflow.
-
-### UART Configuration
-
-The firmware is configured for the Lidl Gateway pinout:
-
-| Signal | Pin | Description |
-|--------|-----|-------------|
-| TX | PA0 | Transmit |
-| RX | PA1 | Receive |
-| RTS | PA4 | Ready to Send |
-| CTS | PA5 | Clear to Send |
-
-Baudrate: 115200, Hardware flow control (RTS/CTS)
+> **Warning**: The EFR32MG1B has only 32KB RAM. Current configuration uses ~27KB. Increasing parameters beyond presets may cause instability.
 
 ---
 
@@ -169,33 +201,83 @@ Baudrate: 115200, Hardware flow control (RTS/CTS)
 
 ### Memory Usage
 
-| Region | Size | Usage |
-|--------|------|-------|
-| Flash | 256 KB | ~200 KB (78%) |
-| RAM | 32 KB | ~24 KB (75%) |
+| Resource | Used | Available |
+|----------|------|-----------|
+| Flash | ~200 KB (78%) | 256 KB |
+| RAM | ~24 KB (75%) | 32 KB |
 | NVM3 | 36 KB | Network data storage |
-
-### Features
-
-- **Zigbee PRO R22** stack
-- **Green Power** support
-- **Source routing** for large networks
-- **Hardware flow control** (RTS/CTS)
-- **1s boot delay** for RTL8196E compatibility
 
 ### Optimizations Applied
 
 To fit in 256KB flash, the following were removed:
-- Debug print components (~12 KB)
-- ZigBee Light Link / touchlink (~4 KB)
-- Virtual UART (~1 KB)
-- PTI (Packet Trace Interface)
+
+| Component | Savings | Reason |
+|-----------|---------|--------|
+| Debug print | ~12 KB | No debug output needed |
+| ZLL / touchlink | ~4 KB | Not used |
+| Virtual UART | ~1 KB | Not needed |
+| PTI (Packet Trace) | ~2 KB | No debug probe |
+
+### Features
+
+- **RTL8196E Boot Delay:** 1-second delay for host UART initialization
+- **Hardware Flow Control:** RTS/CTS required for reliable TCP operation
+- **NVM3 Storage:** 36KB for network credentials and tokens
 
 ---
 
+## Troubleshooting
+
+### No response from NCP
+
+1. Verify TCP connection: `nc -zv <gateway-ip> 8888`
+2. Check baud rate matches (115200) on firmware and serialgateway
+3. Verify hardware flow control is enabled on serialgateway
+
+### EZSP communication errors
+
+1. Ensure Z2M/ZHA is configured for `ember` adapter
+2. Check for EZSP version mismatch (this firmware is EZSP v13)
+3. Restart serialgateway with hardware flow control: `serialgateway` (not `-f`)
+
+### Device won't pair
+
+1. Enable permit join in Z2M/ZHA
+2. Factory reset the device
+3. Move device closer to coordinator for initial pairing
+
+---
+
+## Files
+
+```
+24-NCP-UART-HW/
+├── build_ncp.sh                 # Build script
+├── README.md                    # This file
+├── firmware/                    # Pre-built firmware files
+│   ├── ncp-uart-hw-7.5.1.gbl
+└── patches/
+    ├── README.md                # Patch documentation
+    ├── apply_config.sh          # Configuration script
+    ├── ncp-uart-hw.slcp         # Project config
+    ├── main.c                   # Entry point (1s delay)
+    └── sl_*.h                   # Configuration headers
+```
+
+---
+
+## Related Projects
+
+- `25-RCP-UART-HW/` - RCP firmware (CPC protocol, for cpcd + zigbeed)
+- `26-OT-RCP/` - OpenThread RCP (for zigbee-on-host)
+- `27-Router/` - Autonomous Zigbee router (no host needed)
 
 ## References
 
 - [EZSP Protocol Reference (UG100)](https://www.silabs.com/documents/public/user-guides/ug100-ezsp-reference-guide.pdf)
 - [EmberZNet NCP Guide (UG115)](https://www.silabs.com/documents/public/user-guides/ug115-ncp-user-guide.pdf)
 - [AN1233: Zigbee Stack Configuration](https://www.silabs.com/documents/public/application-notes/an1233-zigbee-stack-config.pdf)
+
+## License
+
+Educational and personal use. Silicon Labs SDK components under their respective licenses.

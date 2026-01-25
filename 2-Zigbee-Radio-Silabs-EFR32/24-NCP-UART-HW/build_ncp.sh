@@ -196,14 +196,13 @@ mkdir -p "${OUTPUT_DIR}"
 SRC_BASE="build/debug/ncp-uart-hw"
 OUT_BASE="ncp-uart-hw-${EMBERZNET_VERSION}"
 
-cp "${SRC_BASE}.s37" "${OUTPUT_DIR}/${OUT_BASE}.s37"
-cp "${SRC_BASE}.hex" "${OUTPUT_DIR}/${OUT_BASE}.hex"
-cp "${SRC_BASE}.bin" "${OUTPUT_DIR}/${OUT_BASE}.bin"
-
-# Create .gbl file using commander if available
+# Create .gbl file using commander (only file copied to firmware/)
 if command -v commander >/dev/null 2>&1; then
     echo "Creating .gbl file..."
-    commander gbl create "${OUTPUT_DIR}/${OUT_BASE}.gbl" --app "${OUTPUT_DIR}/${OUT_BASE}.s37"
+    commander gbl create "${OUTPUT_DIR}/${OUT_BASE}.gbl" --app "${SRC_BASE}.s37"
+else
+    echo "WARNING: commander not found, cannot create .gbl file"
+    echo "Other formats available in build/debug/"
 fi
 
 # =========================================
@@ -220,9 +219,12 @@ echo "Firmware size:"
 arm-none-eabi-size "${SRC_BASE}.out"
 echo ""
 echo "Output files:"
-ls -lh "${OUTPUT_DIR}/${OUT_BASE}".*
+echo "  firmware/${OUT_BASE}.gbl  (for UART flashing)"
+echo ""
+echo "Other formats in build/debug/:"
+ls -lh "${SRC_BASE}".{s37,hex,bin} 2>/dev/null || true
 echo ""
 echo "Flash commands:"
-echo "  Via UART/Xmodem: ./firmware/flash_ezsp13.sh <gateway_ip> firmware/${OUT_BASE}.gbl"
-echo "  Via J-Link:      commander flash firmware/${OUT_BASE}.s37 --device ${TARGET_DEVICE}"
+echo "  Via UART:   universal-silabs-flasher --device socket://IP:8888 flash --firmware firmware/${OUT_BASE}.gbl"
+echo "  Via J-Link: commander flash firmware/${OUT_BASE}.gbl --device ${TARGET_DEVICE}"
 echo ""
