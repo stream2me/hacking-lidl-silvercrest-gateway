@@ -1,0 +1,79 @@
+# cpcd + zigbeed container for Lidl Silvercrest Gateway RCP
+# Uses pre-built binaries from Nerivec's silabs-multiprotocol-builder
+# Supports: linux/amd64, linux/arm64, linux/arm/v7
+#
+# Architecture:
+#   TCP:8888 (gateway) -> socat -> cpcd -> zigbeed -> socat -> TCP:9999 (Z2M)
+
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TARGETARCH
+ARG NERIVEC_VERSION=v2024.6.1
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    socat \
+    supervisor \
+    netcat-openbsd \
+    gettext-base \
+    procps \
+    curl \
+    xz-utils \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install pre-built binaries from Nerivec
+# Map Docker TARGETARCH to Nerivec naming convention
+RUN ARCH_NAME=$(case "${TARGETARCH}" in \
+        amd64)  echo "x86_64" ;; \
+        arm64)  echo "arm64" ;; \
+        arm)    echo "arm32" ;; \
+        *)      echo "x86_64" ;; \
+    esac) && \
+    TARBALL="silabs-multiprotocol-components-${ARCH_NAME}-ubuntu_latest.tar.xz" && \
+    URL="https://github.com/Nerivec/silabs-multiprotocol-builder/releases/download/${NERIVEC_VERSION}/${TARBALL}" && \
+    echo "Downloading ${URL}" && \
+    curl -fsSL "${URL}" -o /tmp/components.tar.xz && \
+    mkdir -p /tmp/components && \
+    tar -xJf /tmp/components.tar.xz -C /tmp/components && \
+    echo "=== Extracted files ===" && \
+    find /tmp/components -type f && \
+    # Install cpcd
+    cp /tmp/components/cpcd/cpcd /usr/local/bin/ && \
+    chmod +x /usr/local/bin/cpcd && \
+    mkdir -p /usr/local/lib && \
+    cp /tmp/components/cpcd/libcpc.so* /usr/local/lib/ 2>/dev/null || true && \
+    # Install zigbeed
+    cp /tmp/components/zigbeed/zigbeed /usr/local/bin/ && \
+    chmod +x /usr/local/bin/zigbeed && \
+    # Cleanup
+    rm -rf /tmp/components /tmp/components.tar.xz && \
+    ldconfig
+
+# Create directories
+RUN mkdir -p /etc/cpcd /var/lib/zigbeed /run/cpcd /var/log/supervisor
+
+# Copy configuration files
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY cpcd.conf.template /etc/cpcd/cpcd.conf.template
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Environment variables with defaults
+ENV RCP_HOST=192.168.1.1
+ENV RCP_PORT=8888
+ENV CPCD_INSTANCE=cpcd_0
+ENV UART_BAUDRATE=115200
+ENV ZIGBEED_PORT=9999
+ENV ZIGBEED_DEBUG=0
+
+# Expose port for Z2M connection
+EXPOSE 9999
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD nc -z localhost ${ZIGBEED_PORT} || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
