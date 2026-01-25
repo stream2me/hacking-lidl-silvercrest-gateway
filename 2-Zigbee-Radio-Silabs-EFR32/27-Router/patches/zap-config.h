@@ -13,9 +13,18 @@
 // values and externally saved values. Separate block is generated for
 // big-endian and little-endian cases.
 
-#define GENERATED_DEFAULTS_COUNT (0)
-#define GENERATED_DEFAULTS { }
+// String defaults: "Silvercrest" (11 chars) and "ZigbeeRouter" (12 chars)
+// Format: length byte followed by string characters
+#define GENERATED_DEFAULTS_COUNT (25)
+#define GENERATED_DEFAULTS { \
+  /* 0: Manufacturer Name "Silvercrest" */ \
+  11, 'S', 'i', 'l', 'v', 'e', 'r', 'c', 'r', 'e', 's', 't', \
+  /* 12: Model Identifier "ZigbeeRouter" */ \
+  12, 'Z', 'i', 'g', 'b', 'e', 'e', 'R', 'o', 'u', 't', 'e', 'r' \
+}
 
+// Macro to reference defaults by offset
+#define ZAP_LONG_DEFAULTS_INDEX(index) ((uint8_t*)&generatedDefaults[index])
 
 // This is an array of EmberAfAttributeMinMaxValue structures.
 
@@ -23,15 +32,17 @@
 #define GENERATED_MIN_MAX_DEFAULTS { }
 
 
-// Attribute count: Basic cluster only (3 attrs)
-#define GENERATED_ATTRIBUTE_COUNT (3)
+// Attribute count: Basic cluster (5 attrs)
+#define GENERATED_ATTRIBUTE_COUNT (5)
 
 // This is an array of EmberAfAttributeMetadata structures.
 #define GENERATED_ATTRIBUTES { \
   /* Basic Cluster - Server */ \
   { 0x0000, ZCL_INT8U_ATTRIBUTE_TYPE, 1, (ATTRIBUTE_MASK_SINGLETON), { (uint8_t*)0x08 } }, /* 0 Cluster: Basic, Attribute: ZCL version, Side: server*/ \
-  { 0x0007, ZCL_ENUM8_ATTRIBUTE_TYPE, 1, (ATTRIBUTE_MASK_SINGLETON), { (uint8_t*)0x01 } }, /* 1 Cluster: Basic, Attribute: power source, Side: server*/ \
-  { 0xFFFD, ZCL_INT16U_ATTRIBUTE_TYPE, 2, (ATTRIBUTE_MASK_SINGLETON), { (uint8_t*)3 } } /* 2 Cluster: Basic, Attribute: cluster revision, Side: server*/ \
+  { 0x0004, ZCL_CHAR_STRING_ATTRIBUTE_TYPE, 12, (ATTRIBUTE_MASK_SINGLETON), { ZAP_LONG_DEFAULTS_INDEX(0) } }, /* 1 Cluster: Basic, Attribute: manufacturer name, Side: server*/ \
+  { 0x0005, ZCL_CHAR_STRING_ATTRIBUTE_TYPE, 13, (ATTRIBUTE_MASK_SINGLETON), { ZAP_LONG_DEFAULTS_INDEX(12) } }, /* 2 Cluster: Basic, Attribute: model identifier, Side: server*/ \
+  { 0x0007, ZCL_ENUM8_ATTRIBUTE_TYPE, 1, (ATTRIBUTE_MASK_SINGLETON), { (uint8_t*)0x01 } }, /* 3 Cluster: Basic, Attribute: power source, Side: server*/ \
+  { 0xFFFD, ZCL_INT16U_ATTRIBUTE_TYPE, 2, (ATTRIBUTE_MASK_SINGLETON), { (uint8_t*)3 } } /* 4 Cluster: Basic, Attribute: cluster revision, Side: server*/ \
 }
 
 
@@ -40,7 +51,7 @@
 
 // This is an array of EmberAfCluster structures.
 #define GENERATED_CLUSTERS { \
-  { 0x0000, (EmberAfAttributeMetadata*)&(generatedAttributes[0]), 3, 4, CLUSTER_MASK_SERVER, NULL } /* 0, Endpoint Id: 1, Cluster: Basic, Side: server*/ \
+  { 0x0000, (EmberAfAttributeMetadata*)&(generatedAttributes[0]), 5, 29, CLUSTER_MASK_SERVER, NULL } /* 0, Endpoint Id: 1, Cluster: Basic, Side: server*/ \
 }
 
 
@@ -48,14 +59,14 @@
 
 // This is an array of EmberAfEndpointType structures.
 #define GENERATED_ENDPOINT_TYPES { \
-  { ((EmberAfCluster*)&(generatedClusters[0])), 1, 4 }, \
+  { ((EmberAfCluster*)&(generatedClusters[0])), 1, 29 }, \
 }
 
 // Largest attribute size is needed for various buffers
-#define ATTRIBUTE_LARGEST (2)
+#define ATTRIBUTE_LARGEST (13)
 
-// Total size of singleton attributes
-#define ATTRIBUTE_SINGLETONS_SIZE (4)
+// Total size of singleton attributes (1 + 12 + 13 + 1 + 2 = 29)
+#define ATTRIBUTE_SINGLETONS_SIZE (29)
 
 // Total size of attribute storage
 #define ATTRIBUTE_MAX_SIZE (0)
@@ -131,6 +142,8 @@
 
 // All Enabled Cluster Attributes
 #define ZCL_USING_BASIC_CLUSTER_VERSION_ATTRIBUTE
+#define ZCL_USING_BASIC_CLUSTER_MANUFACTURER_NAME_ATTRIBUTE
+#define ZCL_USING_BASIC_CLUSTER_MODEL_IDENTIFIER_ATTRIBUTE
 #define ZCL_USING_BASIC_CLUSTER_POWER_SOURCE_ATTRIBUTE
 #define ZCL_USING_BASIC_CLUSTER_CLUSTER_REVISION_SERVER_ATTRIBUTE
 
