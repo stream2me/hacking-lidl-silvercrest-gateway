@@ -48,11 +48,12 @@ RUN git clone --depth 1 --branch ${CPCD_VERSION} https://github.com/SiliconLabs/
 # ============================================================
 
 # Download Simplicity SDK release (includes prebuilt libs, no git-lfs needed)
+# -d extracts directly into target dir (like Nerivec)
 # unzip returns exit code 1 for Unicode filename warnings - ignore with || true
 RUN curl -fsSL -o /tmp/simplicity-sdk.zip \
     "https://github.com/SiliconLabs/simplicity_sdk/releases/download/${SIMPLICITY_SDK_VERSION}/simplicity-sdk.zip" \
-    && (unzip -q /tmp/simplicity-sdk.zip -d /opt || true) \
-    && mv /opt/simplicity_sdk_* /opt/simplicity_sdk \
+    && mkdir -p /opt/simplicity_sdk \
+    && (unzip -q /tmp/simplicity-sdk.zip -d /opt/simplicity_sdk || true) \
     && rm /tmp/simplicity-sdk.zip
 
 ENV SIMPLICITY_SDK=/opt/simplicity_sdk
