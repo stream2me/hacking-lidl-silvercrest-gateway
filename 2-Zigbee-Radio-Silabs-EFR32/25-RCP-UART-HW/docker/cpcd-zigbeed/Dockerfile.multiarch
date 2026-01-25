@@ -94,51 +94,11 @@ RUN java -version && slc --version
 RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile -name=zigbeed --force && \
     echo "=== Generated files ===" && ls -la
 
-# Patch Makefile for correct architecture
+# Patch Makefile for correct architecture (slc may generate paths for different arch)
 RUN ARCH=$(cat /tmp/arch.txt) && \
     find . -name "*.mak" -exec sed -i "s|/gcc/arm64v8/|/gcc/${ARCH}/|g; s|/gcc/x86-64/|/gcc/${ARCH}/|g; s|/gcc/arm32v7/|/gcc/${ARCH}/|g" {} \;
 
-# Add Zigbee libraries
-RUN ARCH=$(cat /tmp/arch.txt) && \
-    cat >> libs_patch.mak << ENDPATCH
-####################################################################
-# Prebuilt Zigbee libraries (architecture: ${ARCH})
-####################################################################
-ZIGBEE_LIB_PATH = \$(SDK_PATH)/protocol/zigbee/build/gcc/${ARCH}
-
-LIBS += \\
-  \$(ZIGBEE_LIB_PATH)/ncp-cbke-library/release_singlenetwork/libncp-cbke-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-gp-library/release_singlenetwork/libncp-gp-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-mfglib-library/release_singlenetwork/libncp-mfglib-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-pro-library/release_singlenetwork/libncp-pro-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-source-route-library/release_singlenetwork/libncp-source-route-library.a \\
-  \$(ZIGBEE_LIB_PATH)/ncp-zll-library/release_singlenetwork/libncp-zll-library.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-cbke-core/release_singlenetwork/libzigbee-cbke-core.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-dynamic-commissioning/release_singlenetwork/libzigbee-dynamic-commissioning.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-gp/release_singlenetwork/libzigbee-gp.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-mfglib/release_singlenetwork/libzigbee-mfglib.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-ncp-uart/release_singlenetwork/libzigbee-ncp-uart.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-pro-stack/release_singlenetwork/libzigbee-pro-stack.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-pro-stack-mac-test-cmds/release_singlenetwork/libzigbee-pro-stack-mac-test-cmds.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-r22-support/release_singlenetwork/libzigbee-r22-support.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-r23-support/release_singlenetwork/libzigbee-r23-support.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-source-route/release_singlenetwork/libzigbee-source-route.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-xncp/release_singlenetwork/libzigbee-xncp.a \\
-  \$(ZIGBEE_LIB_PATH)/zigbee-zll/release_singlenetwork/libzigbee-zll.a
-ENDPATCH
-
-# Find and patch Makefile
-RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile 2>/dev/null | head -1 || echo "Makefile") && \
-    echo "Using Makefile: ${MAKEFILE}" && \
-    if [ -f "${MAKEFILE}" ]; then \
-        awk '/-include.*\.project\.mak/{print; system("cat libs_patch.mak"); next}1' \
-        "${MAKEFILE}" > "${MAKEFILE}.tmp" && \
-        mv "${MAKEFILE}.tmp" "${MAKEFILE}"; \
-    else \
-        echo "ERROR: Makefile not found!" && ls -la && exit 1; \
-    fi
-
-# Build zigbeed
+# Build zigbeed (let slc-generated Makefile handle library dependencies)
 RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile 2>/dev/null | head -1 || echo "Makefile") && \
     make -f "${MAKEFILE}" -j$(nproc)
 
