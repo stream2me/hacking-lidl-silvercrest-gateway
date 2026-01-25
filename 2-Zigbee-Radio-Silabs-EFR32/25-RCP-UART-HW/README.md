@@ -165,9 +165,29 @@ See subdirectories for detailed build instructions:
 - `rcp-stack/` - Systemd service manager for the complete chain
 - `cpcd-rtl8196e/` - Cross-compile cpcd for gateway (experimental)
 
-### Quick Start with rcp-stack
+### Quick Start with Docker (Recommended)
 
-The `rcp-stack` tool manages the entire cpcd + zigbeed chain:
+A pre-built Docker image is available for **PC (amd64)** and **Raspberry Pi (arm64)**:
+
+```bash
+# Pull the image
+docker pull ghcr.io/jnilo1/cpcd-zigbeed:latest
+
+# Or use the full stack with Zigbee2MQTT
+cd docker/
+# Edit docker-compose.yml: set RCP_HOST to your gateway's IP
+docker compose up -d
+```
+
+See `docker/README.md` for detailed instructions.
+
+| Image | cpcd | EmberZNet | EZSP | Architectures |
+|-------|------|-----------|------|---------------|
+| `ghcr.io/jnilo1/cpcd-zigbeed:latest` | 4.5.3 | 8.2.2 | v18 | amd64, arm64 |
+
+### Quick Start with rcp-stack (Native)
+
+The `rcp-stack` tool manages the entire cpcd + zigbeed chain natively (without Docker):
 
 ```bash
 # Start the stack
