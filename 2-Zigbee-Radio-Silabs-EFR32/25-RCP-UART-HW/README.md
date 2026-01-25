@@ -1,33 +1,21 @@
 # RCP 802.15.4 Firmware with cpcd + zigbeed
 
-Radio Co-Processor (RCP) firmware for the EFR32MG1B232F256GM48.
+Radio Co-Processor (RCP) firmware for the EFR32MG1B232F256GM48 chip found in the Lidl Silvercrest Smart Home Gateway.
 
-## About this firmware
+This firmware transforms the gateway's Zigbee chip into a **Radio Co-Processor** that runs the Zigbee stack on an external Linux host (your PC, Raspberry Pi, or server) instead of the limited RTL8196E.
 
-This is a **multiprotocol RCP** (rcp-uart-802154) that supports running OpenThread and Zigbee
-stacks simultaneously on a host processor. It uses concurrent multiprotocol (CMP) / multi-PAN
-functionality to run 802.15.4 networks on the same channel. The host stacks communicate with
-the RCP using the Co-Processor Communication protocol (CPC), which acts as a protocol
-multiplexer and serial transport layer.
+## About RCP Architecture
 
-**In this project, we use it for Zigbee only** (via cpcd + zigbeed), running the Zigbee stack
-on an external Linux host rather than on the RTL8196E gateway. This "Zigbee-on-host" approach
-offloads the resource-intensive EmberZNet stack to a more capable machine, while the gateway
-simply bridges the EFR32 UART to TCP.
-
-> For more information on multiprotocol capabilities, see
-> [AN1333: Running Zigbee, OpenThread, and Bluetooth Concurrently on a Linux Host](https://www.silabs.com/documents/public/application-notes/an1333-concurrent-protocols-with-802-15-4-rcp.pdf)
-
-## Architecture
+Unlike standalone firmware (like the Router), an RCP delegates the entire Zigbee protocol stack to a host computer. The EFR32 only handles the radio PHY/MAC layer and communicates with the host via the **CPC Protocol** (Co-Processor Communication).
 
 ```
 +-------------------+    UART     +-------------------+   Ethernet   +---------------------+
 |  EFR32MG1B (RCP)  |   115200    |  RTL8196E         |    TCP/IP    |  Host (x86/ARM)     |
 |                   |    baud     |  (Gateway SoC)    |              |                     |
 |  802.15.4 PHY/MAC |<----------->|                   |<------------>|  cpcd               |
-|  + CPC Protocol   |   ttyS0     |  serialgateway    |   port 8888  |    |                |
-|                   |     <->     |  (serial->TCP)    |              |    v                |
-|  CPC Protocol v5  |   ttyS1     |                   |              |  zigbeed            |
+|  + CPC Protocol   |   ttyS1     |  serialgateway    |   port 8888  |    |                |
+|                   |             |  (serial->TCP)    |              |    v                |
+|  CPC Protocol v5  |             |                   |              |  zigbeed            |
 |  HW Flow Control  |             |                   |              |  (Zigbee stack)     |
 |                   |             |                   |              |    |                |
 +-------------------+             +-------------------+              |    v                |
@@ -35,12 +23,132 @@ simply bridges the EFR32 UART to TCP.
                                                                      +---------------------+
 ```
 
-The RTL8196E runs `serialgateway` to bridge the EFR32's UART to TCP port 8888.
-See [34-Userdata](../../3-Main-SoC-Realtek-RTL8196E/34-Userdata/) for gateway setup.
+**Why use RCP instead of NCP?**
 
-## Host Software
+| Aspect | NCP (24-NCP-UART-HW) | RCP (this firmware) |
+|--------|----------------------|---------------------|
+| Stack location | On EFR32 (limited RAM) | On host (unlimited resources) |
+| Protocol | EZSP (binary) | CPC (multiplexed) |
+| Multiprotocol | No | Yes (Zigbee + Thread) |
+| Stack updates | Requires reflash | Just update zigbeed |
+| Network size | Limited by EFR32 RAM | Host memory is the limit |
 
-This RCP requires **cpcd** and **zigbeed** on the host:
+## Hardware
+
+| Component | Specification |
+|-----------|---------------|
+| Zigbee SoC | EFR32MG1B232F256GM48 |
+| Flash | 256KB |
+| RAM | 32KB |
+| Radio | 2.4GHz IEEE 802.15.4 |
+| UART | PA0 (TX), PA1 (RX), PA4 (RTS), PA5 (CTS) @ 115200 baud |
+
+---
+
+## Option 1: Flash Pre-built Firmware (Recommended)
+
+A pre-built firmware is available in the `firmware/` directory. This is the quickest way to get started.
+
+### Prerequisites
+
+1. **Install universal-silabs-flasher** (see [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/) for details)
+
+2. **Restart serialgateway with `-f` flag:**
+
+   By default, `serialgateway` runs with hardware flow control enabled. The flasher requires flow control to be **disabled** to communicate with the bootloader.
+
+   On the gateway via SSH:
+   ```bash
+   killall serialgateway && serialgateway -f
+   ```
+
+   The `-f` flag disables hardware flow control, allowing the flasher to reset the EFR32 into bootloader mode.
+
+   **Important:** Close all SSH sessions connected to the gateway before flashing. Active sessions with open connections to port 8888 (e.g., `nc`, previous flasher runs) can interfere with `universal-silabs-flasher`.
+
+### Flash
+
+```bash
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/rcp-uart-802154.gbl
+```
+
+### After flashing
+
+Re-enable hardware flow control for normal operation:
+```bash
+killall serialgateway && serialgateway
+```
+
+Then continue to [Host Software Setup](#host-software-setup) to configure cpcd and zigbeed on your host machine.
+
+---
+
+## Option 2: Build from Source
+
+For users who want to modify the CPC configuration, change baudrate, or use a different SDK version.
+
+### Prerequisites
+
+Install Silicon Labs tools (see `1-Build-Environment/12-silabs-toolchain/`):
+
+```bash
+cd 1-Build-Environment/12-silabs-toolchain
+./install_silabs.sh
+```
+
+This installs:
+- `slc-cli` - Silicon Labs Configurator
+- `arm-none-eabi-gcc` - ARM GCC toolchain
+- `commander` - Simplicity Commander
+- Gecko SDK with EmberZNet
+
+### Build
+
+```bash
+cd 2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW
+./build_rcp.sh
+```
+
+### Output
+
+```
+firmware/
+└── rcp-uart-802154.gbl   # For UART/Xmodem flashing
+```
+
+### Customization
+
+Edit `patches/rcp-uart-802154.slcp` for SDK configuration, or `patches/sl_cpc_drv_uart_usart_vcom_config.h` for UART settings (pins, baudrate).
+
+### Flash
+
+**Via network (same as Option 1):**
+```bash
+# On gateway: killall serialgateway && serialgateway -f
+# Important: close all SSH sessions before flashing!
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/rcp-uart-802154.gbl
+# Then: killall serialgateway && serialgateway
+```
+
+**Via J-Link/SWD** (if you have physical access to the SWD pads):
+```bash
+commander flash firmware/rcp-uart-802154.gbl \
+    --device EFR32MG1B232F256GM48
+```
+
+> For a detailed explanation of how `universal-silabs-flasher` works (firmware detection, bootloader entry, the `-f` flag, troubleshooting), see [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/).
+
+---
+
+## Host Software Setup
+
+After flashing the RCP firmware, you need to configure the host software chain.
+
+### Required Components
 
 | Component | Version | Source | Description |
 |-----------|---------|--------|-------------|
@@ -48,14 +156,34 @@ This RCP requires **cpcd** and **zigbeed** on the host:
 | zigbeed | EmberZNet 8.2.2 | Simplicity SDK 2025.6.2 | Zigbee stack daemon (recommended) |
 | zigbeed | EmberZNet 7.5.1 | Gecko SDK 4.5.0 | Zigbee stack daemon (legacy) |
 
-See subdirectories for build instructions:
+### Build Instructions
+
+See subdirectories for detailed build instructions:
 - `cpcd/` - CPC daemon (for host)
 - `zigbeed-8.2.2/` - zigbeed EmberZNet 8.2.2 (recommended)
 - `zigbeed-7.5.1/` - zigbeed EmberZNet 7.5.1 (legacy)
 - `rcp-stack/` - Systemd service manager for the complete chain
 - `cpcd-rtl8196e/` - Cross-compile cpcd for gateway (experimental)
 
-## Zigbee2MQTT Configuration
+### Quick Start with rcp-stack
+
+The `rcp-stack` tool manages the entire cpcd + zigbeed chain:
+
+```bash
+# Start the stack
+rcp-stack up
+
+# Check status
+rcp-stack status
+
+# Stop the stack
+rcp-stack down
+
+# Troubleshoot
+rcp-stack doctor
+```
+
+### Zigbee2MQTT Configuration
 
 With rcp-stack (recommended):
 ```yaml
@@ -63,81 +191,12 @@ serial:
   port: /tmp/ttyZ2M
   adapter: ember
 ```
-## Build
 
-### Prerequisites
+---
 
-- GSDK 4.5.0 (Gecko SDK)
-- slc-cli (Silicon Labs Configurator)
-- ARM GCC toolchain (12.x recommended)
+## Baudrate and Network Considerations
 
-### Build Commands
-
-```bash
-./build_rcp.sh
-```
-
-### Output File
-
-| File | Use |
-|------|-----|
-| `firmware/rcp-uart-802154.gbl` | Flash via UART or J-Link |
-
-## Flashing
-
-Via J-Link/SWD:
-```bash
-commander flash firmware/rcp-uart-802154.gbl --device EFR32MG1B232F256GM48
-```
-
-Via TCP (universal-silabs-flasher through serialgateway):
-```bash
-universal-silabs-flasher --device socket://GATEWAY_IP:8888 flash --firmware firmware/rcp-uart-802154.gbl
-```
-
-## Hardware Pinout
-
-| Signal | Pin | Function |
-|--------|-----|----------|
-| TX | PA0 | USART0 TX |
-| RX | PA1 | USART0 RX |
-| RTS | PA4 | Flow Control |
-| CTS | PA5 | Flow Control |
-
-**UART:** 115200 baud, 8N1, Hardware Flow Control (required)
-
-## Features
-
-- **RTL8196E Boot Delay:** 1-second delay for host UART initialization
-- **Hardware Flow Control:** RTS/CTS required for reliable TCP operation
-- **CPC Security Disabled:** Saves ~45KB flash (not needed for local network)
-
-## Memory Usage
-
-| Resource | Used | Available |
-|----------|------|-----------|
-| Flash | ~116 KB | 256 KB |
-| RAM | ~22 KB | 32 KB |
-
-## TCP Support
-
-**TCP via serialgateway is supported.** The cpcd + zigbeed architecture works over TCP when
-using the RTL8196E's serialgateway to bridge the UART to Ethernet.
-
-Configuration that works:
-- EFR32 RCP ↔ UART 115200 (HW flow control) ↔ RTL8196E serialgateway ↔ TCP:8888 ↔ cpcd ↔ zigbeed
-
-**Key requirements for TCP stability:**
-- Hardware flow control (RTS/CTS) must be enabled on both RCP and serialgateway
-- cpcd configured for TCP client mode: `tcp_client_address: <gateway-ip>`, `tcp_client_port: 8888`
-- CPC Protocol v5 (native GSDK 4.5.0)
-- **Direct Ethernet cable** between host and gateway (recommended)
-
-> **Important:** The CPC protocol is sensitive to network latency and packet loss.
-> For best reliability, connect the gateway directly to the host with an Ethernet cable,
-> avoiding WiFi bridges, congested switches, or multiple network hops.
-
-## Baudrate Options
+### Baudrate Options
 
 | Baudrate | Status | Notes |
 |----------|--------|-------|
@@ -145,7 +204,7 @@ Configuration that works:
 | 230400 | Supported | Tested, works reliably |
 | 460800+ | **Not supported** | Causes UART overruns |
 
-### Network size considerations
+### Network Size vs Baudrate
 
 | Liaison | Throughput |
 |---------|------------|
@@ -165,62 +224,119 @@ At 115200, the UART is ~2x slower than the Zigbee radio. Practical impact:
 
 For most home installations, 115200 is sufficient.
 
-### Why 460800 doesn't work
+### Why 460800+ Doesn't Work
 
-The RTL8196E UART has hardware limitations that prevent reliable operation above 230400 baud:
-
+The RTL8196E UART has hardware limitations:
 - **16-byte FIFO** (16550A standard) with RX trigger at 8 bytes
 - At 460800 baud, the CPU has only **170 µs** to respond before overrun
 - `serialgateway` runs in userspace, adding context switch latency
-- Competing interrupts (Ethernet, timers) delay UART servicing
 
-**Diagnostic:** Check UART errors on the gateway:
+Check UART errors on the gateway:
 ```bash
 cat /proc/tty/driver/serial
 # fe:xxx = framing errors, oe:xxx = overrun errors
 ```
 
-To use 230400, modify the baudrate in:
-1. `patches/sl_cpc_drv_uart_usart_vcom_config.h`
-2. `patches/rcp-uart-802154.slcp`
+### Changing Baudrate
+
+To use 230400:
+1. Edit `patches/sl_cpc_drv_uart_usart_vcom_config.h`
+2. Edit `patches/rcp-uart-802154.slcp`
 3. Rebuild firmware and flash
 4. Update `serialgateway -b 230400` on gateway
 5. Update `cpcd.conf` with `uart_device_baud: 230400`
 
+---
+
+## TCP Stability Requirements
+
+The CPC protocol is sensitive to network conditions. For reliable operation:
+
+| Requirement | Why |
+|-------------|-----|
+| **Hardware flow control** | Prevents buffer overruns |
+| **Direct Ethernet** | Minimizes latency and jitter |
+| **No WiFi bridges** | WiFi adds unpredictable latency |
+| **Avoid congested switches** | Packet delays cause CPC timeouts |
+
+**Recommended:** Connect the gateway directly to the host with an Ethernet cable.
+
+---
+
 ## Troubleshooting
 
-### No response from RCP
+### Flashing Issues
 
-1. Verify TCP connection: `nc -zv <gateway-ip> 8888`
-2. Check baud rate matches (115200) on firmware and serialgateway
-3. Verify hardware flow control is enabled
+| Problem | Solution |
+|---------|----------|
+| No response from RCP | Verify TCP: `nc -zv <gateway-ip> 8888` |
+| Xmodem timeout | Close all SSH sessions, use `-f` flag |
+| Wrong firmware flashed | Reflash - the bootloader is always preserved |
 
-### cpcd connection issues
+### cpcd Connection Issues
 
-1. Check cpcd config points to gateway: `tcp_client_address: 192.168.1.xxx`
-2. Verify CPC protocol version matches (v5 for GSDK 4.5.0)
+| Problem | Solution |
+|---------|----------|
+| cpcd won't connect | Check `tcp_client_address` in cpcd.conf |
+| CPC version mismatch | Use GSDK 4.5.0 for CPC Protocol v5 |
+| Frequent disconnects | Use direct Ethernet, check for WiFi bridges |
+
+### zigbeed Issues
+
+| Problem | Solution |
+|---------|----------|
+| zigbeed won't start | Check cpcd is running: `rcp-stack status` |
+| Stack version mismatch | Rebuild zigbeed with matching SDK version |
+
+---
+
+## Memory Usage
+
+| Resource | Used | Available |
+|----------|------|-----------|
+| Flash | ~116 KB | 256 KB |
+| RAM | ~22 KB | 32 KB |
+
+---
+
+## Features
+
+- **RTL8196E Boot Delay:** 1-second delay for host UART initialization
+- **Hardware Flow Control:** RTS/CTS required for reliable TCP operation
+- **CPC Security Disabled:** Saves ~45KB flash (not needed for local network)
+- **Multiprotocol Ready:** Can run Zigbee + OpenThread simultaneously
+
+---
 
 ## Project Structure
 
 ```
 25-RCP-UART-HW/
 ├── build_rcp.sh                 # RCP firmware build script
-├── README.md
+├── README.md                    # Original README
+├── README2.md                   # This file (restructured)
 ├── patches/                     # RCP firmware patches
-│   ├── rcp-uart-802154.slcp                 # Project config (based on SDK sample)
-│   ├── main.c                               # Entry point (1s RTL8196E boot delay)
-│   ├── sl_cpc_drv_uart_usart_vcom_config.h  # UART pins (PA0/PA1/PA4/PA5)
+│   ├── rcp-uart-802154.slcp                 # Project config
+│   ├── main.c                               # Entry point (1s delay)
+│   ├── sl_cpc_drv_uart_usart_vcom_config.h  # UART pins
 │   └── sl_cpc_security_config.h             # CPC security disabled
 ├── firmware/                    # Output (rcp-uart-802154.gbl)
-├── cpcd/                        # CPC daemon build scripts (for host)
+├── cpcd/                        # CPC daemon build scripts
 ├── zigbeed-7.5.1/               # zigbeed EmberZNet 7.5.1 (legacy)
 ├── zigbeed-8.2.2/               # zigbeed EmberZNet 8.2.2 (recommended)
-└── rcp-stack/                   # Systemd --user service manager
-    ├── bin/rcp-stack            # Main script (up/down/status/doctor)
+└── rcp-stack/                   # Systemd service manager
+    ├── bin/rcp-stack            # Main script
     ├── scripts/                 # Helper scripts
-    ├── systemd/user/            # Service unit files
-    └── examples/                # Config file examples
+    ├── systemd/user/            # Service units
+    └── examples/                # Config examples
 ```
+
+---
+
+## Related Projects
+
+- `24-NCP-UART-HW/` - NCP firmware (simpler, stack on EFR32)
+- `27-Router/` - Router firmware (autonomous, no host needed)
 
 ## References
 
