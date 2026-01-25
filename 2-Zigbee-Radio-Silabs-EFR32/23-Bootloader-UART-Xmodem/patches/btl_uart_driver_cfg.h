@@ -27,7 +27,7 @@
 
 // <e SL_SERIAL_UART_FLOW_CONTROL> Hardware flow control
 // <i> Default: 0
-#define SL_SERIAL_UART_FLOW_CONTROL      1
+#define SL_SERIAL_UART_FLOW_CONTROL      0
 // </e>
 
 // <o SL_DRIVER_UART_RX_BUFFER_SIZE> Receive buffer size
@@ -52,34 +52,44 @@
 // <<< sl:start pin_tool >>>
 // <usart signal=TX,RX,(CTS),(RTS)> SL_SERIAL_UART
 // $[USART_SL_SERIAL_UART]
-
-// Lidl Gateway UART configuration - USART0
+#ifndef SL_SERIAL_UART_PERIPHERAL
 #define SL_SERIAL_UART_PERIPHERAL                USART0
+#endif
+#ifndef SL_SERIAL_UART_PERIPHERAL_NO
 #define SL_SERIAL_UART_PERIPHERAL_NO             0
+#endif
 
 // USART0 TX on PA0
+#ifndef SL_SERIAL_UART_TX_PORT
 #define SL_SERIAL_UART_TX_PORT                   gpioPortA
+#endif
+#ifndef SL_SERIAL_UART_TX_PIN
 #define SL_SERIAL_UART_TX_PIN                    0
+#endif
+#ifndef SL_SERIAL_UART_TX_LOC
+#define SL_SERIAL_UART_TX_LOC                    0
+#endif
 
 // USART0 RX on PA1
+#ifndef SL_SERIAL_UART_RX_PORT
 #define SL_SERIAL_UART_RX_PORT                   gpioPortA
+#endif
+#ifndef SL_SERIAL_UART_RX_PIN
 #define SL_SERIAL_UART_RX_PIN                    1
-
-// USART0 CTS on PA5
-#define SL_SERIAL_UART_CTS_PORT                  gpioPortA
-#define SL_SERIAL_UART_CTS_PIN                   5
-
-// USART0 RTS on PA4
-#define SL_SERIAL_UART_RTS_PORT                  gpioPortA
-#define SL_SERIAL_UART_RTS_PIN                   4
-
-// USART0 pin locations for Series 1
-#define SL_SERIAL_UART_TX_LOC                    0
+#endif
+#ifndef SL_SERIAL_UART_RX_LOC
 #define SL_SERIAL_UART_RX_LOC                    0
-#define SL_SERIAL_UART_CTS_LOC                   0
-#define SL_SERIAL_UART_RTS_LOC                   0
+#endif
 
 // [USART_SL_SERIAL_UART]$
+
+// <gpio optional=true> SL_VCOM_ENABLE
+
+// $[GPIO_SL_VCOM_ENABLE]
+//#define SL_VCOM_ENABLE_PORT                  gpioPortB
+//#define SL_VCOM_ENABLE_PIN                   4
+// [GPIO_SL_VCOM_ENABLE]$
+
 // <<< sl:end pin_tool >>>
 
 #endif // BTL_UART_DRIVER_CONFIG_H

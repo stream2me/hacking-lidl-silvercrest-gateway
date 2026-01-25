@@ -1,26 +1,39 @@
 # Patches for Bootloader-UART-Xmodem
 
-Ready-to-use project files for building the UART XMODEM bootloader for EFR32MG1B232F256GM48 (Lidl Silvercrest Gateway).
+Project files for building the UART XMODEM bootloader for EFR32MG1B232F256GM48.
+Configuration matches Simplicity Studio standard project.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `bootloader-uart-xmodem.slcp` | Project config with components and settings |
-| `btl_uart_driver_cfg.h` | UART pin configuration (USART0 PA0/PA1, RTS/CTS PA4/PA5) |
-| `btl_gpio_activation_cfg.h` | Button pin configuration (PB11) |
+| `bootloader-uart-xmodem.slpb` | Post-build configuration (generates .s37, -crc.s37, -combined.s37, .gbl) |
+| `btl_uart_driver_cfg.h` | UART pin configuration (USART0 PA0/PA1, no flow control) |
 
 ## Build Process
 
 ```
-1. Copy slcp from patches/
+1. Copy slcp + slpb from patches/
         ↓
 2. slc generate
         ↓
 3. Copy config headers from patches/
         ↓
 4. make -Oz
+        ↓
+5. Post-build (commander convert/gbl create)
 ```
+
+## Output Files
+
+| File | Description |
+|------|-------------|
+| `bootloader-uart-xmodem.s37` | Main stage bootloader |
+| `bootloader-uart-xmodem-crc.s37` | Main stage with CRC |
+| `bootloader-uart-xmodem-combined.s37` | First stage + Main stage (for J-Link flash) |
+| `bootloader-uart-xmodem.gbl` | GBL image (for XMODEM upload) |
+| `first_stage.s37` | First stage only |
 
 ---
 
@@ -32,14 +45,8 @@ Ready-to-use project files for building the UART XMODEM bootloader for EFR32MG1B
 |--------|------|-----|----------|
 | TX | PA0 | 0 | 0 |
 | RX | PA1 | 1 | 0 |
-| RTS | PA4 | 4 | 0 |
-| CTS | PA5 | 5 | 0 |
 
-### GPIO Activation
-
-| Signal | Port | Pin |
-|--------|------|-----|
-| Button | PB11 | 11 |
+No hardware flow control (RTS/CTS disabled).
 
 ---
 
@@ -50,5 +57,3 @@ The bootloader occupies the first 16 KB of flash:
 - Main stage: 0x0800 - 0x4000 (14 KB)
 
 Applications start at 0x4000.
-
-Typical compiled size: ~12.6 KB (fits within 14 KB limit)
