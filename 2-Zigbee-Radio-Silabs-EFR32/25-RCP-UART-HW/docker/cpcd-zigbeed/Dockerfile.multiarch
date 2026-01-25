@@ -54,15 +54,29 @@ RUN git clone --depth 1 --branch ${SIMPLICITY_SDK_VERSION} \
 
 ENV SIMPLICITY_SDK=/opt/simplicity_sdk
 
-# Detect architecture for library paths
-# SDK uses: x86-64, arm64v8, arm32v7
+# Detect architecture and set slc parameters
+# SDK lib paths: x86-64, arm64v8, arm32v7
+# slc --with: zigbee_x86_64, zigbee_arm64, zigbee_arm32 + linux_arch_32/64
 RUN ARCH=$(case "$(uname -m)" in \
         x86_64)  echo "x86-64" ;; \
         aarch64) echo "arm64v8" ;; \
         armv7l)  echo "arm32v7" ;; \
         *)       echo "x86-64" ;; \
-    esac) && echo "${ARCH}" > /tmp/arch.txt && \
-    echo "Building for architecture: ${ARCH}"
+    esac) && \
+    ZIGBEE_COMP=$(case "$(uname -m)" in \
+        x86_64)  echo "zigbee_x86_64" ;; \
+        aarch64) echo "zigbee_arm64" ;; \
+        armv7l)  echo "zigbee_arm32" ;; \
+        *)       echo "zigbee_x86_64" ;; \
+    esac) && \
+    LINUX_ARCH=$(case "$(uname -m)" in \
+        armv7l)  echo "linux_arch_32" ;; \
+        *)       echo "linux_arch_64" ;; \
+    esac) && \
+    echo "${ARCH}" > /tmp/arch.txt && \
+    echo "${ZIGBEE_COMP}" > /tmp/zigbee_comp.txt && \
+    echo "${LINUX_ARCH}" > /tmp/linux_arch.txt && \
+    echo "Building for: ${ARCH} (${ZIGBEE_COMP}, ${LINUX_ARCH})"
 
 # Install slc-cli
 RUN ARCH_SLC=$(case "$(uname -m)" in \
@@ -85,31 +99,25 @@ RUN cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.c . && \
     cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.h . && \
     cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed/zigbeed.slcp" .
 
-# Trust SDK and generate makefile
+# Trust SDK
 RUN slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
-RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile --force 2>&1 | tail -5
+
+# Generate makefile with correct architecture components (like Nerivec)
+# --with selects architecture-specific libraries
+# --without prevents slc from auto-selecting wrong architecture
+RUN ZIGBEE_COMP=$(cat /tmp/zigbee_comp.txt) && \
+    LINUX_ARCH=$(cat /tmp/linux_arch.txt) && \
+    echo "=== slc generate with ${ZIGBEE_COMP},${LINUX_ARCH} ===" && \
+    slc generate zigbeed.slcp \
+        --sdk "${SIMPLICITY_SDK}" \
+        --with="${ZIGBEE_COMP},${LINUX_ARCH}" \
+        --without=zigbee_recommended_linux_arch \
+        -o makefile \
+        --force 2>&1 | tail -10
 
 # Replace partial SDK copy with symlink (slc copies some files, but not all headers)
 RUN rm -rf simplicity_sdk_* && \
     ln -s "${SIMPLICITY_SDK}" simplicity_sdk_2025.6.2
-
-# Patch Makefile for correct architecture
-RUN ARCH=$(cat /tmp/arch.txt) && \
-    echo "=== Patching for ${ARCH} ===" && \
-    sed -i "s|/gcc/arm64v8/|/gcc/${ARCH}/|g" zigbeed.project.mak && \
-    sed -i "s|/gcc/x86-64/|/gcc/${ARCH}/|g" zigbeed.project.mak && \
-    sed -i "s|/gcc/arm32v7/|/gcc/${ARCH}/|g" zigbeed.project.mak && \
-    sed -i "s|/gcc/i386/|/gcc/${ARCH}/|g" zigbeed.project.mak
-
-# Add missing libraries (slc doesn't include all required libs)
-# Only 3 libs are actually missing: ncp-cbke-library, zigbee-cbke-core, zigbee-pro-stack-mac-test-cmds
-RUN ARCH=$(cat /tmp/arch.txt) && \
-    LIB_PATH="\$\(SDK_PATH\)/protocol/zigbee/build/gcc/${ARCH}" && \
-    echo "" >> zigbeed.Makefile && \
-    echo "# Additional libraries not included by slc" >> zigbeed.Makefile && \
-    echo "LIBS += ${LIB_PATH}/ncp-cbke-library/release_singlenetwork/libncp-cbke-library.a" >> zigbeed.Makefile && \
-    echo "LIBS += ${LIB_PATH}/zigbee-cbke-core/release_singlenetwork/libzigbee-cbke-core.a" >> zigbeed.Makefile && \
-    echo "LIBS += ${LIB_PATH}/zigbee-pro-stack-mac-test-cmds/release_singlenetwork/libzigbee-pro-stack-mac-test-cmds.a" >> zigbeed.Makefile
 
 # Build zigbeed
 RUN make -f zigbeed.Makefile -j$(nproc)
