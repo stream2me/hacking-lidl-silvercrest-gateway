@@ -80,11 +80,25 @@ cd 2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/zigbeed-8.2.2
 
 > **Note:** On first run, the script automatically downloads Simplicity SDK 2025.6.2 from GitHub (~1.5 GB).
 
-### Step 5: Install rcp-stack Manager
+### Step 5: Setup rcp-stack Manager
 
+The `rcp-stack` script needs its companion files (scripts/, systemd/, examples/), so it must be run from the cloned repository.
+
+**Option A: Create an alias** (recommended)
+
+Add to your `~/.bashrc`:
 ```bash
-sudo cp 2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/rcp-stack/bin/rcp-stack /usr/local/bin/
-sudo chmod +x /usr/local/bin/rcp-stack
+alias rcp-stack='/path/to/hacking-lidl-silvercrest-gateway/2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/rcp-stack/bin/rcp-stack'
+```
+
+Then reload:
+```bash
+source ~/.bashrc
+```
+
+**Option B: Run directly from the repo**
+```bash
+./2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/rcp-stack/bin/rcp-stack up
 ```
 
 ### Step 6: Configure
@@ -93,6 +107,8 @@ First run creates the config file:
 ```bash
 rcp-stack up
 # -> Creates ~/.config/rcp-stack/rcp-stack.env
+# -> Copies helper scripts to ~/.config/rcp-stack/bin/
+# -> Links systemd units to ~/.config/systemd/user/
 # -> Will fail, prompting you to edit the config
 ```
 
@@ -101,14 +117,21 @@ Edit the configuration:
 nano ~/.config/rcp-stack/rcp-stack.env
 ```
 
-Set your gateway IP:
+Set your gateway IP and commands:
 ```bash
 RCP_ENDPOINT=tcp://192.168.1.xxx:8888
+CPCD_COMMAND='cpcd -c "$HOME/.config/rcp-stack/cpcd.conf"'
+ZIGBEED_COMMAND='zigbeed -r "spinel+cpc://$CPC_INSTANCE_NAME?iid=1&iid-list=0" -p "$ZIGBEED_PTY" -d 1 -v 0'
 ```
 
 Copy the cpcd config:
 ```bash
-cp 2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/rcp-stack/examples/cpcd.conf.example ~/.config/rcp-stack/cpcd.conf
+cp /path/to/hacking-lidl-silvercrest-gateway/2-Zigbee-Radio-Silabs-EFR32/25-RCP-UART-HW/rcp-stack/examples/cpcd.conf.example ~/.config/rcp-stack/cpcd.conf
+```
+
+**Important:** Edit `cpcd.conf` and set the correct baudrate (must match RCP firmware):
+```yaml
+uart_device_baud: 115200
 ```
 
 ### Step 7: Start the Stack
@@ -130,7 +153,6 @@ In `configuration.yaml`:
 serial:
   port: /tmp/ttyZ2M
   adapter: ember
-  baudrate: 115200
 ```
 
 ## Verification
