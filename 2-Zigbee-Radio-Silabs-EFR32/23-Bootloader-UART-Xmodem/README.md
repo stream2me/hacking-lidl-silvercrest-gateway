@@ -10,14 +10,15 @@ This bootloader enables firmware updates via UART using the XMODEM-CRC protocol,
 # Build the bootloader
 ./build_bootloader.sh
 
-# Flash via J-Link
-commander flash firmware/bootloader-uart-xmodem-2.4.2-crc.s37 --device EFR32MG1B232F256GM48
+# Flash via J-Link (combined = first stage + main stage)
+commander flash firmware/bootloader-uart-xmodem-2.4.2-combined.s37 --device EFR32MG1B232F256GM48
 ```
 
 ## Prerequisites
 
 - **slc** (Silicon Labs CLI) in PATH
 - **arm-none-eabi-gcc** in PATH
+- **commander** in PATH
 - **GECKO_SDK** environment variable set
 
 Or use Docker from the `2-Zigbee-Radio-Silabs-EFR32` directory:
@@ -30,13 +31,15 @@ docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder \
 ## Build Process
 
 ```
-1. Copy slcp from patches/
+1. Copy slcp + slpb from patches/
         ↓
 2. slc generate
         ↓
 3. Copy config headers from patches/
         ↓
 4. make -Oz
+        ↓
+5. Post-build (commander convert/gbl create)
 ```
 
 ## Hardware Configuration
@@ -47,28 +50,20 @@ docker run -it --rm -v $(pwd)/..:/workspace lidl-gateway-builder \
 |--------|------|-----|-------------|
 | TX | PA0 | 0 | Transmit to RTL8196E |
 | RX | PA1 | 1 | Receive from RTL8196E |
-| RTS | PA4 | 4 | Request to Send |
-| CTS | PA5 | 5 | Clear to Send |
 
-### GPIO Activation
+No hardware flow control (standard Simplicity Studio configuration).
 
-| Signal | Port | Pin | Description |
-|--------|------|-----|-------------|
-| Button | PB11 | 11 | Hold during reset to enter bootloader |
+## Output Files
 
-### Debug
-
-| Signal | Port | Pin | Description |
-|--------|------|-----|-------------|
-| SWV | PF2 | 2 | Serial Wire Viewer |
-
-## Output File
+After running `./build_bootloader.sh`, files are in `firmware/`:
 
 | File | Description |
 |------|-------------|
-| `bootloader-uart-xmodem-X.Y.Z-crc.s37` | Main bootloader with CRC (e.g., `bootloader-uart-xmodem-2.4.2-crc.s37`) |
-
-Only the CRC version is generated, as it's the only one accessible when using serialgateway with hardware flow control.
+| `bootloader-uart-xmodem-X.Y.Z.s37` | Main stage bootloader |
+| `bootloader-uart-xmodem-X.Y.Z-crc.s37` | Main stage with CRC |
+| `bootloader-uart-xmodem-X.Y.Z-combined.s37` | First stage + Main stage (for J-Link) |
+| `bootloader-uart-xmodem-X.Y.Z.gbl` | GBL image (for XMODEM/UART upload) |
+| `first_stage.s37` | First stage only |
 
 ## Using the Bootloader
 
@@ -80,7 +75,6 @@ Once flashed, the bootloader responds to serial commands at 115200 baud:
 | `2` | Start application |
 
 To enter the bootloader:
-- Hold PB11 button during reset, OR
 - Send serial break, OR
 - No valid application present
 
@@ -101,7 +95,7 @@ EFR32MG1B (Gecko Series 1) devices use a **two-stage bootloader system**:
 
 - Resides in main flash memory starting at address **0x0800**
 - Contains UART XMODEM functionality
-- Can be updated in the field via `.gbl` packages (*not recommended*)
+- Can be updated in the field via `.gbl` packages
 
 ### Application
 
@@ -125,41 +119,83 @@ EFR32MG1B (Gecko Series 1) devices use a **two-stage bootloader system**:
 
 ______________________________________________________________________
 
-## Updating the Bootloader via SWD
+## Flashing the Bootloader
 
-When you have SWD access, flash the bootloader:
+> **Warning**: Bootloader firmware flashing always carries some risk. If the process is interrupted or fails, the device may become unresponsive and require a J-Link/SWD debugger to recover. **Having a debugger available is strongly recommended** before attempting any bootloader update.
+
+### Option 1: Flash via J-Link/SWD (Recommended)
+
+The safest method. Flash the combined image (first stage + main stage):
 
 ```bash
+commander flash firmware/bootloader-uart-xmodem-2.4.2-combined.s37 --device EFR32MG1B232F256GM48
+```
+
+Or flash stages separately:
+
+```bash
+# First stage (only if missing/corrupted)
+commander flash firmware/first_stage.s37 --device EFR32MG1B232F256GM48
+
+# Main stage with CRC
 commander flash firmware/bootloader-uart-xmodem-2.4.2-crc.s37 --device EFR32MG1B232F256GM48
 ```
 
-Expected output:
-```
-Parsing file bootloader-uart-xmodem-2.4.2-crc.s37...
-Writing 16384 bytes starting at address 0x00000000
-Comparing range 0x00000000 - 0x00003FFF (16 KiB)
-Programming range 0x00000000 - 0x00001FFF (8 KiB)
-Programming range 0x00002000 - 0x00003FFF (8 KiB)
-DONE
-```
+### Option 2: Flash via universal-silabs-flasher (Remote, Stage 2 only)
 
-______________________________________________________________________
+You can update the **Stage 2 bootloader** remotely using `universal-silabs-flasher` if you already have a working bootloader installed.
 
-## After Bootloader Update: Restore Application
+> **Note**: This only updates Stage 2. Stage 1 cannot be updated via UART.
 
-After a bootloader update, restore your application:
+#### Prerequisites
+
+1. **Install universal-silabs-flasher** (see [22-Backup-Flash-Restore](../22-Backup-Flash-Restore/) for details)
+
+2. **Restart serialgateway with `-f` flag:**
+
+   On the gateway via SSH:
+   ```bash
+   killall serialgateway && serialgateway -f
+   ```
+
+   The `-f` flag disables hardware flow control, allowing the flasher to communicate with the bootloader.
+
+   **Important:** Close all SSH sessions connected to the gateway before flashing.
+
+#### Flash the bootloader
 
 ```bash
-commander flash ncp-uart-hw.s37 --device EFR32MG1B232F256GM48
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware firmware/bootloader-uart-xmodem-2.4.2.gbl
 ```
 
-Or via UART XMODEM (if bootloader is working):
-```bash
-# Convert .s37 to .gbl first
-commander gbl create app.gbl --app ncp-uart-hw.s37
+#### Expected error at the end
 
-# Then upload via XMODEM
-./flash_xmodem.sh /dev/ttyUSB0 app.gbl
+After flashing the bootloader, `universal-silabs-flasher` will show an **error** because it cannot find a valid application:
+
+```
+...
+Firmware uploaded successfully
+Running firmware...
+Error: Failed to detect firmware type
+```
+
+**This error is expected and can be ignored.** The bootloader was flashed successfully, but there is no application yet. The bootloader will now display its menu waiting for a firmware upload.
+
+#### After flashing: upload an application
+
+Immediately after updating the bootloader, upload an application (NCP, RCP, or Router):
+
+```bash
+universal-silabs-flasher \
+    --device socket://192.168.1.X:8888 \
+    flash --firmware ../24-NCP-UART-HW/firmware/ncp-uart-hw-7.5.1.gbl
+```
+
+Then reboot the gateway:
+```bash
+reboot
 ```
 
 ______________________________________________________________________
@@ -183,19 +219,5 @@ ______________________________________________________________________
 | File | Purpose |
 |------|---------|
 | `bootloader-uart-xmodem.slcp` | Project config with components |
-| `btl_uart_driver_cfg.h` | UART pin configuration (USART0 PA0/PA1, RTS/CTS PA4/PA5) |
-| `btl_gpio_activation_cfg.h` | Button pin configuration (PB11) |
-
-## Pre-built Firmware
-
-
-After running `./build_bootloader.sh`, output files are in [`firmware/`](firmware/):
-
-| File | Content | Address | Usage |
-|------|---------|---------|-------|
-| `bootloader-uart-xmodem-X.Y.Z.s37` | Stage 2 only | 0x0800-0x3FFF | J-Link or combined GBL |
-| `bootloader-uart-xmodem-X.Y.Z.gbl` | Stage 2 in GBL | - | XMODEM upgrade (requires working Stage 1) |
-
-> **Important**: These files contain only the **Stage 2 (Main Bootloader)**, not Stage 1.
-> - If Stage 1 is already present and working → use `.gbl` via XMODEM
-> - If Stage 1 is missing or corrupted → use J-Link to flash `.s37` + restore Stage 1 from `build/autogen/first_stage.s37`
+| `bootloader-uart-xmodem.slpb` | Post-build config (generates .s37, -crc.s37, -combined.s37, .gbl) |
+| `btl_uart_driver_cfg.h` | UART pin configuration (USART0 PA0/PA1, no flow control) |
