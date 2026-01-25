@@ -1,0 +1,182 @@
+# cpcd + zigbeed container for Lidl Silvercrest Gateway RCP
+# Multi-architecture build (amd64, arm64)
+# Compiles from source - takes ~30 min per architecture
+#
+# Architecture:
+#   TCP:8888 (gateway) -> socat -> cpcd -> zigbeed -> socat -> TCP:9999 (Z2M)
+
+FROM ubuntu:24.04 AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG CPCD_VERSION=v4.5.3
+ARG SIMPLICITY_SDK_VERSION=v2024.12.2
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    ca-certificates \
+    curl \
+    unzip \
+    libmbedtls-dev \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Clone and build cpcd
+RUN git clone --depth 1 --branch ${CPCD_VERSION} https://github.com/SiliconLabs/cpc-daemon.git \
+    && cd cpc-daemon \
+    && mkdir build && cd build \
+    && cmake .. \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DENABLE_ENCRYPTION=OFF \
+    && make -j$(nproc) \
+    && make install DESTDIR=/install \
+    && ldconfig
+
+# Clone Simplicity SDK
+RUN git clone --depth 1 --branch ${SIMPLICITY_SDK_VERSION} \
+    https://github.com/SiliconLabs/simplicity_sdk.git \
+    /opt/simplicity_sdk
+
+ENV SIMPLICITY_SDK=/opt/simplicity_sdk
+
+# Detect architecture and set library path
+RUN ARCH=$(case "$(uname -m)" in \
+        x86_64)  echo "x86-64" ;; \
+        aarch64) echo "arm64v8" ;; \
+        armv7l)  echo "arm32v7" ;; \
+        *)       echo "x86-64" ;; \
+    esac) && echo "${ARCH}" > /tmp/arch.txt
+
+# Build zigbeed
+WORKDIR /build/zigbeed
+
+# Copy zigbeed source files
+RUN cp "${SIMPLICITY_SDK}/protocol/zigbee/app/zigbeed"/*.c . 2>/dev/null || \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.c . && \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/zigbeed"/*.h . 2>/dev/null || \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed"/*.h . && \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/zigbeed/zigbeed.slcp" . 2>/dev/null || \
+    cp "${SIMPLICITY_SDK}/protocol/zigbee/app/projects/zigbeed/zigbeed.slcp" .
+
+# Install slc-cli for the correct architecture
+RUN ARCH_SLC=$(case "$(uname -m)" in \
+        x86_64)  echo "linux" ;; \
+        aarch64) echo "linux_arm64" ;; \
+        *)       echo "linux" ;; \
+    esac) && \
+    curl -fsSL "https://www.silabs.com/documents/login/software/slc_cli_${ARCH_SLC}.zip" -o /tmp/slc.zip && \
+    unzip -q /tmp/slc.zip -d /opt && \
+    rm /tmp/slc.zip && \
+    chmod +x /opt/slc_cli/slc
+
+ENV PATH="/opt/slc_cli:${PATH}"
+
+# Trust SDK and generate makefile
+RUN slc signature trust --sdk "${SIMPLICITY_SDK}" 2>/dev/null || true
+RUN slc generate zigbeed.slcp -cp --sdk "${SIMPLICITY_SDK}" -o makefile --force 2>&1 | tail -5
+
+# Fix SDK symlink
+RUN rm -rf simplicity_sdk_* && \
+    SDK_LINK=$(basename $(ls -d ${SIMPLICITY_SDK}/../simplicity_sdk* 2>/dev/null | head -1) 2>/dev/null || echo "simplicity_sdk_2024.12.2") && \
+    ln -s "${SIMPLICITY_SDK}" "${SDK_LINK}" 2>/dev/null || ln -s "${SIMPLICITY_SDK}" simplicity_sdk_2024.12.2
+
+# Patch Makefile for correct architecture
+RUN ARCH=$(cat /tmp/arch.txt) && \
+    find . -name "*.mak" -exec sed -i "s|/gcc/arm64v8/|/gcc/${ARCH}/|g; s|/gcc/x86-64/|/gcc/${ARCH}/|g; s|/gcc/arm32v7/|/gcc/${ARCH}/|g" {} \;
+
+# Add Zigbee libraries
+RUN ARCH=$(cat /tmp/arch.txt) && \
+    cat >> libs_patch.mak << ENDPATCH
+####################################################################
+# Prebuilt Zigbee libraries (architecture: ${ARCH})
+####################################################################
+ZIGBEE_LIB_PATH = \$(SDK_PATH)/protocol/zigbee/build/gcc/${ARCH}
+
+LIBS += \\
+  \$(ZIGBEE_LIB_PATH)/ncp-cbke-library/release_singlenetwork/libncp-cbke-library.a \\
+  \$(ZIGBEE_LIB_PATH)/ncp-gp-library/release_singlenetwork/libncp-gp-library.a \\
+  \$(ZIGBEE_LIB_PATH)/ncp-mfglib-library/release_singlenetwork/libncp-mfglib-library.a \\
+  \$(ZIGBEE_LIB_PATH)/ncp-pro-library/release_singlenetwork/libncp-pro-library.a \\
+  \$(ZIGBEE_LIB_PATH)/ncp-source-route-library/release_singlenetwork/libncp-source-route-library.a \\
+  \$(ZIGBEE_LIB_PATH)/ncp-zll-library/release_singlenetwork/libncp-zll-library.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-cbke-core/release_singlenetwork/libzigbee-cbke-core.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-dynamic-commissioning/release_singlenetwork/libzigbee-dynamic-commissioning.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-gp/release_singlenetwork/libzigbee-gp.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-mfglib/release_singlenetwork/libzigbee-mfglib.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-ncp-uart/release_singlenetwork/libzigbee-ncp-uart.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-pro-stack/release_singlenetwork/libzigbee-pro-stack.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-pro-stack-mac-test-cmds/release_singlenetwork/libzigbee-pro-stack-mac-test-cmds.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-r22-support/release_singlenetwork/libzigbee-r22-support.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-r23-support/release_singlenetwork/libzigbee-r23-support.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-source-route/release_singlenetwork/libzigbee-source-route.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-xncp/release_singlenetwork/libzigbee-xncp.a \\
+  \$(ZIGBEE_LIB_PATH)/zigbee-zll/release_singlenetwork/libzigbee-zll.a
+ENDPATCH
+
+RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile | head -1) && \
+    awk '/-include.*\.project\.mak/{print; system("cat libs_patch.mak"); next}1' \
+    "${MAKEFILE}" > "${MAKEFILE}.tmp" && \
+    mv "${MAKEFILE}.tmp" "${MAKEFILE}"
+
+# Build zigbeed
+RUN MAKEFILE=$(ls zigbeed.Makefile 2>/dev/null || ls *.Makefile | head -1) && \
+    make -f "${MAKEFILE}" -j$(nproc)
+
+# Install to staging directory
+RUN mkdir -p /install/usr/local/bin && \
+    cp build/debug/zigbeed /install/usr/local/bin/ && \
+    chmod +x /install/usr/local/bin/zigbeed
+
+# ============================================================
+# Runtime image
+# ============================================================
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    socat \
+    supervisor \
+    netcat-openbsd \
+    gettext-base \
+    libmbedcrypto16t64 \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binaries from builder
+COPY --from=builder /install/usr/local /usr/local
+
+# Update library cache
+RUN ldconfig
+
+# Create directories
+RUN mkdir -p /etc/cpcd /var/lib/zigbeed /run/cpcd /var/log/supervisor
+
+# Copy configuration files
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY cpcd.conf.template /etc/cpcd/cpcd.conf.template
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Environment variables with defaults
+ENV RCP_HOST=192.168.1.1
+ENV RCP_PORT=8888
+ENV CPCD_INSTANCE=cpcd_0
+ENV UART_BAUDRATE=115200
+ENV ZIGBEED_PORT=9999
+ENV ZIGBEED_DEBUG=0
+
+# Expose port for Z2M connection
+EXPOSE 9999
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD nc -z localhost ${ZIGBEED_PORT} || exit 1
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

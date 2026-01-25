@@ -1,0 +1,131 @@
+# Docker Compose for Zigbee stack with Lidl Silvercrest Gateway (RCP mode)
+#
+# Usage:
+#   1. Change RCP_HOST below to your gateway's IP address
+#   2. docker compose up -d
+#   3. Access Zigbee2MQTT at http://localhost:8080
+#
+# Architecture:
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │ Lidl Gateway                                                        │
+#   │ ┌───────────┐  UART   ┌────────────────┐  TCP:8888                 │
+#   │ │ EFR32 RCP │◄───────►│ serialgateway  │◄──────────────────────┐   │
+#   │ └───────────┘         └────────────────┘                       │   │
+#   └─────────────────────────────────────────────────────────────────│───┘
+#                                                                     │
+#   ┌─────────────────────────────────────────────────────────────────│───┐
+#   │ Docker Host                                                     │   │
+#   │                                                                 │   │
+#   │   ┌─────────────────────────────────────────────────────────────┼─┐ │
+#   │   │ cpcd-zigbeed container                                      │ │ │
+#   │   │                                                             │ │ │
+#   │   │   socat ◄───────────────────────────────────────────────────┘ │ │
+#   │   │     │ /tmp/ttyCpcRcp                                          │ │
+#   │   │     ▼                                                         │ │
+#   │   │   cpcd (CPC daemon)                                           │ │
+#   │   │     │ /dev/shm/cpcd/                                          │ │
+#   │   │     ▼                                                         │ │
+#   │   │   zigbeed (EmberZNet 8.x)                                     │ │
+#   │   │     │ /tmp/ttyZigbeed                                         │ │
+#   │   │     ▼                                                         │ │
+#   │   │   socat ──────────────────────────────────────┐               │ │
+#   │   │                                               │ TCP:9999      │ │
+#   │   └───────────────────────────────────────────────│───────────────┘ │
+#   │                                                   │                 │
+#   │   ┌───────────────────────────────────────────────▼───────────────┐ │
+#   │   │ zigbee2mqtt container                                         │ │
+#   │   │   adapter: ember                                              │ │
+#   │   │   port: socket://cpcd-zigbeed:9999                            │ │
+#   │   └───────────────────────────────────────────────────────────────┘ │
+#   │                                                                     │
+#   │   ┌───────────────────────────────────────────────────────────────┐ │
+#   │   │ mosquitto container                                           │ │
+#   │   │   MQTT broker on port 1883                                    │ │
+#   │   └───────────────────────────────────────────────────────────────┘ │
+#   └─────────────────────────────────────────────────────────────────────┘
+
+services:
+  # MQTT broker
+  mosquitto:
+    container_name: mosquitto
+    image: eclipse-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    environment:
+      - TZ=Europe/Paris
+    restart: unless-stopped
+    networks:
+      - zigbee-net
+
+  # cpcd + zigbeed (Zigbee stack)
+  cpcd-zigbeed:
+    container_name: cpcd-zigbeed
+    image: ghcr.io/jnilo1/cpcd-zigbeed:latest
+    # To build locally instead:
+    # build:
+    #   context: ./cpcd-zigbeed
+    #   dockerfile: Dockerfile
+    environment:
+      - TZ=Europe/Paris
+      #---------------------------------------------------------
+      # IMPORTANT: Change this to your gateway's IP address
+      #---------------------------------------------------------
+      - RCP_HOST=192.168.1.126
+      - RCP_PORT=8888
+      #---------------------------------------------------------
+      - CPCD_INSTANCE=cpcd_0
+      - UART_BAUDRATE=115200
+      - ZIGBEED_PORT=9999
+      - ZIGBEED_DEBUG=0
+    volumes:
+      - zigbeed_data:/var/lib/zigbeed
+      - type: tmpfs
+        target: /dev/shm
+        tmpfs:
+          size: 64M
+    networks:
+      - zigbee-net
+    restart: unless-stopped
+    cap_add:
+      - SYS_PTRACE
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9999"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # Zigbee2MQTT
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    image: ghcr.io/koenkk/zigbee2mqtt:2.7.2
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - z2m_data:/app/data
+      - ./z2m/configuration.yaml:/app/data/configuration.yaml
+    networks:
+      - zigbee-net
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      cpcd-zigbeed:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+
+networks:
+  zigbee-net:
+    driver: bridge
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  zigbeed_data:
+  z2m_data:
