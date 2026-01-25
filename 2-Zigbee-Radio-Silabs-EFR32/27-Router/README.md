@@ -202,25 +202,103 @@ Check routing is working:
 
 ### Mini-CLI for Bootloader Access
 
-The firmware includes a lightweight CLI (only ~2KB) that allows reflashing without J-Link. Connect via serial (115200 baud) and type commands:
+The firmware includes a lightweight CLI (only ~2KB) that allows reflashing without J-Link.
+
+#### Commands
 
 | Command | Response | Description |
 |---------|----------|-------------|
 | `version` | `stack ver. [7.5.1.0]` | Show stack version |
-| `bootloader reboot` | Reboots | Enter Gecko bootloader |
-| `info` | Device info | Show firmware info |
+| `bootloader reboot` | `Rebooting...` | Enter Gecko bootloader |
+| `info` | `Zigbee Router - EmberZNet 7.5.1` | Show firmware info |
 | `help` | Command list | Show available commands |
 
-**Usage with `universal-silabs-flasher`:**
+#### Architecture
+
+```
+┌─────────────────┐     UART      ┌─────────────────┐
+│   RTL8196E      │───────────────│   EFR32MG1B     │
+│   (Host CPU)    │  PA0/PA1      │   (Zigbee SoC)  │
+│                 │  115200 baud  │                 │
+│  serialgateway  │               │  Router FW      │
+│    port 8888    │               │  + mini-CLI     │
+└─────────────────┘               └─────────────────┘
+```
+
+#### Direct usage from the gateway (via SSH)
+
+```bash
+# Stop serialgateway
+killall serialgateway
+
+# Configure serial port
+stty -F /dev/ttyS1 115200 raw -echo
+
+# Read responses in background
+cat /dev/ttyS1 &
+
+# Send commands
+echo "version" > /dev/ttyS1
+# Output: stack ver. [7.5.1.0]
+
+echo "help" > /dev/ttyS1
+# Output: Commands list
+
+echo "info" > /dev/ttyS1
+# Output: Zigbee Router - EmberZNet 7.5.1
+
+# Enter bootloader (caution: requires reflash or "2" to exit)
+echo "bootloader reboot" > /dev/ttyS1
+# Output: Rebooting...
+# Then: Gecko Bootloader menu appears
+```
+
+To exit the Gecko Bootloader and return to the firmware:
+```bash
+echo "2" > /dev/ttyS1   # "2. run" in bootloader menu
+```
+
+#### Direct usage from remote host (via netcat)
+
+```bash
+# On gateway first: killall serialgateway && serialgateway -f
+
+# From your PC:
+nc 192.168.1.X 8888
+# Then type commands interactively:
+# > version
+# stack ver. [7.5.1.0]
+# > help
+# Commands:
+#   version           - Show stack version
+#   bootloader reboot - Enter bootloader
+#   info              - Show device info
+#   help              - Show this help
+```
+
+#### Usage with `universal-silabs-flasher`
 
 The flasher automatically detects the Router firmware and uses `bootloader reboot` to enter bootloader mode:
 ```bash
+# On gateway: killall serialgateway && serialgateway -f
 universal-silabs-flasher \
     --device socket://192.168.1.X:8888 \
     flash --firmware new-firmware.gbl
 ```
 
-This allows you to reflash the router without physical access, unlike NCP firmware where EZSP commands are used.
+**Bootloader entry flow:**
+```
+1. Flasher sends "version\r\n"
+2. Mini-CLI responds "stack ver. [7.5.1.0]"
+   → Flasher detects ApplicationType.ROUTER
+3. Flasher sends "bootloader reboot\r\n"
+4. Mini-CLI calls bootloader_rebootAndInstall()
+   → EFR32 reboots into Gecko Bootloader
+5. Flasher uploads firmware via Xmodem
+6. Bootloader writes to flash and reboots
+```
+
+This allows you to reflash the router without physical access. Unlike NCP firmware (which uses EZSP commands), the Router firmware uses CLI commands for bootloader entry.
 
 ### ZCL Configuration
 
@@ -265,7 +343,7 @@ The following components were excluded to minimize flash usage:
 
 | Component | Savings | Reason |
 |-----------|---------|--------|
-| CLI | ~28KB | No serial console needed |
+| Full CLI | ~28KB | Replaced by mini-CLI (~2KB) |
 | Debug Print | ~10KB | No debug output |
 | Green Power | ~50KB | Not used |
 | Zigbee Light Link | ~40KB | Not a lighting device |
@@ -276,7 +354,7 @@ The following components were excluded to minimize flash usage:
 
 - **No Identify**: The "Identify" button in Z2M/ZHA won't trigger any visual feedback (the gateway has no accessible LED anyway)
 - **No Find-and-Bind**: Cannot do direct device-to-device binding (not needed for a pure router)
-- **No CLI**: Cannot interact via serial commands (reduces attack surface)
+- **Mini-CLI only**: The full CLI framework (~28KB) is replaced by a lightweight mini-CLI (~2KB) with only essential commands for bootloader access
 
 All core routing functionality is preserved.
 
