@@ -110,7 +110,6 @@ component:
 # - zigbee_groups_server (~4KB)
 # - zigbee_reporting (~5KB)
 # - zigbee_debug_print (~10KB)
-# - cli, zigbee_zcl_cli, zigbee_core_cli (~28KB)
 # - zigbee_network_creator* (coordinator only)
 # - simple_led, simple_button (no GPIO on this board)
 

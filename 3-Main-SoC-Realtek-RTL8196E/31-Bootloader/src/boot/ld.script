@@ -18,6 +18,20 @@ SECTIONS
     *(.text)
     *(.rodata)
     *(.rodata1)
+
+    /* IRAM section - required for CPU cache/IRAM initialization */
+    . = ALIGN(0x4000);
+    __iram = .;
+    *(.iram-rtkwlan)
+    __iram_end = .;
+
+    /* IMEM sections */
+    . = ALIGN(0x1000);
+    __load_start_IMEM = .;
+    *(.test98iram)
+    *(.test96diram)
+    __load_end_IMEM = .;
+
     *(.gnu.warning)
   } = 0
 

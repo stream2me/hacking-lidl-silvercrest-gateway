@@ -15,7 +15,7 @@ NM       = $(CROSS)nm
 CFLAGS   = -g -O -G 0 \
            -fomit-frame-pointer -fno-pic -mno-abicalls -fgnu89-inline \
            -I. -I./include \
-           -D__KERNEL__ -Dlinux -DDDR1_SDRAM -DRTL865X=1
+           -D__KERNEL__ -Dlinux -DRTL865X=1
 
 ifdef JUMP_ADDR
 CFLAGS  += -DJUMP_ADDR=$(JUMP_ADDR)

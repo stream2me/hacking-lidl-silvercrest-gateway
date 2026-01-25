@@ -152,8 +152,9 @@ Edit `configuration.yaml`:
 serial:
   port: tcp://192.168.1.X:8888
   adapter: zoh
-  baudrate: 115200
 ```
+
+> **Note:** Baudrate and flow control are handled by `serialgateway` on the gateway side.
 
 **Tested devices:** Xiaomi LYWSD03MMC (temperature/humidity sensor)
 
