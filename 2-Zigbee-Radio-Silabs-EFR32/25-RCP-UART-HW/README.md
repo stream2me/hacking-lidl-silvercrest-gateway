@@ -313,8 +313,7 @@ The CPC protocol is sensitive to network conditions. For reliable operation:
 ```
 25-RCP-UART-HW/
 ├── build_rcp.sh                 # RCP firmware build script
-├── README.md                    # Original README
-├── README2.md                   # This file (restructured)
+├── README.md                    # This file
 ├── patches/                     # RCP firmware patches
 │   ├── rcp-uart-802154.slcp                 # Project config
 │   ├── main.c                               # Entry point (1s delay)
@@ -324,6 +323,7 @@ The CPC protocol is sensitive to network conditions. For reliable operation:
 ├── cpcd/                        # CPC daemon build scripts
 ├── zigbeed-7.5.1/               # zigbeed EmberZNet 7.5.1 (legacy)
 ├── zigbeed-8.2.2/               # zigbeed EmberZNet 8.2.2 (recommended)
+├── docker/                      # Docker stack (cpcd + zigbeed + Z2M)
 └── rcp-stack/                   # Systemd service manager
     ├── bin/rcp-stack            # Main script
     ├── scripts/                 # Helper scripts

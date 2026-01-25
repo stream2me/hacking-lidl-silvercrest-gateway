@@ -92,7 +92,7 @@ ghcr.io/jnilo1/cpcd-zigbeed:latest
 | Tag | cpcd | EmberZNet | EZSP |
 |-----|------|-----------|------|
 | `latest` | 4.5.3 | 8.2.2 | v18 |
-| `4.5.3-8.2.2` | 4.5.3 | 8.2.2 | v18 |
+| `cpcd4.5.3-ezsp18` | 4.5.3 | 8.2.2 | v18 |
 
 ## Configuration Reference
 
