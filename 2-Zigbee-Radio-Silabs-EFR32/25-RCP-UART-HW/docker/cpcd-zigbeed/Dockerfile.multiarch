@@ -48,11 +48,11 @@ RUN git clone --depth 1 --branch ${CPCD_VERSION} https://github.com/SiliconLabs/
 # ============================================================
 
 # Download Simplicity SDK release (includes prebuilt libs, no git-lfs needed)
-RUN curl -fsSL -o /tmp/sisdk-sdk.zip \
-    "https://github.com/SiliconLabs/simplicity_sdk/releases/download/${SIMPLICITY_SDK_VERSION}/sisdk-sdk.zip" \
-    && unzip -q /tmp/sisdk-sdk.zip -d /opt \
+RUN curl -fsSL -o /tmp/simplicity-sdk.zip \
+    "https://github.com/SiliconLabs/simplicity_sdk/releases/download/${SIMPLICITY_SDK_VERSION}/simplicity-sdk.zip" \
+    && unzip -q /tmp/simplicity-sdk.zip -d /opt \
     && mv /opt/simplicity_sdk_* /opt/simplicity_sdk \
-    && rm /tmp/sisdk-sdk.zip
+    && rm /tmp/simplicity-sdk.zip
 
 ENV SIMPLICITY_SDK=/opt/simplicity_sdk
 
