@@ -131,6 +131,9 @@ RUN mkdir -p /install/usr/local/bin && \
     cp build/debug/zigbeed /install/usr/local/bin/ && \
     chmod +x /install/usr/local/bin/zigbeed
 
+# Strip binaries to reduce image size
+RUN strip /install/usr/local/bin/zigbeed /install/usr/local/bin/cpcd
+
 # ============================================================
 # Stage 3: Runtime image
 # ============================================================
