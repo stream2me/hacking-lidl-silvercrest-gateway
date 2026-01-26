@@ -143,11 +143,12 @@ echo "[2/2] Building..."
 make -f zigbeed.Makefile -j$(nproc)
 
 # =========================================
-# Install
+# Strip and install
 # =========================================
 echo ""
-echo "Installing to /usr/local/bin..."
+echo "Stripping and installing to /usr/local/bin..."
 
+strip build/debug/zigbeed
 sudo cp build/debug/zigbeed /usr/local/bin/
 sudo chmod +x /usr/local/bin/zigbeed
 
