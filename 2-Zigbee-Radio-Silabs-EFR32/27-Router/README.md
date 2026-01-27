@@ -264,7 +264,7 @@ This is the preferred method because it provides local echo of typed commands.
 
 # From your PC:
 jnilo@jnilo-Key-R:~$ nc 192.168.1.126 8888
-help
+help    # no prompt on connect, just type "help"
 Commands:
   version           - Show stack version
   bootloader reboot - Enter bootloader
