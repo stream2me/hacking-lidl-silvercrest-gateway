@@ -140,19 +140,40 @@ commander flash build/debug/z3-router.s37 \
 
 ### Joining a Network
 
+#### How it works
+
+The join process requires coordination between the **coordinator** (Z2M) and the **router**:
+
+1. **Coordinator** must have **permit join enabled** - it broadcasts beacons to announce it accepts new devices
+2. **Router** performs **network steering** - it scans all channels looking for beacons
+3. If the router finds a beacon during its scan → **join succeeds**
+4. If no beacon is found → **error 0x70** (EMBER_NO_BEACONS) and automatic retry
+
+#### Automatic retry behavior
+
+The router automatically attempts to join:
+- **At boot**: Network steering starts 3 seconds after power-on
+- **On failure**: Retries every **10 seconds** automatically
+- **Continuous**: Keeps retrying until it successfully joins a network
+
+#### Steps to join
+
 1. **Enable permit join** on your Zigbee coordinator:
-   - Zigbee2MQTT: Settings → "Permit join"
+   - Zigbee2MQTT: Settings → "Permit join" (or via web UI)
    - Home Assistant ZHA: "Add device"
 
-2. **Power on** the gateway with the router firmware
+2. **Power on** the gateway with the router firmware (or reset it)
 
-3. **Wait** for the router to appear (usually 30-60 seconds)
+3. **Wait** for the router to appear (usually 10-30 seconds)
 
-The router will:
-- Scan all Zigbee channels (11-26)
-- Find networks with permit join enabled
-- Join using the default install code
-- Start routing mesh traffic
+Since the router retries every 10 seconds, you just need to ensure permit join stays enabled long enough (at least 15-20 seconds) for the next retry cycle.
+
+#### What the router does
+
+- Scans all Zigbee channels (11-26)
+- Finds networks with permit join enabled
+- Joins using the default install code
+- Starts routing mesh traffic
 
 ### Verification
 
@@ -163,20 +184,23 @@ info  Zigbee: allowing new devices to join.
 info  Device '0x847127fffe422cfe' joined
 info  Starting interview of '0x847127fffe422cfe'
 info  Successfully interviewed '0x847127fffe422cfe', device has successfully been paired
-warning  Device '0x847127fffe422cfe' with Zigbee model 'undefined' and manufacturer name
-         'undefined' is NOT supported, please follow https://www.zigbee2mqtt.io/...
+warning  Device '0x847127fffe422cfe' with Zigbee model 'LidlRouter' and manufacturer name
+         'Silvercrest' is NOT supported, please follow https://www.zigbee2mqtt.io/...
 ```
 
 The device will appear in Z2M with these properties:
 
 ![Router in Zigbee2MQTT](images/z2m-router-joined.png)
 
-| Property | Value |
-|----------|-------|
-| Device type | Router |
-| Support status | Not supported |
-| Interview state | Successful |
-| Power | Mains |
+| Property | Value | Source |
+|----------|-------|--------|
+| Device type | Router | Zigbee device type |
+| Zigbee Model | LidlRouter + Silvercrest | ZCL Basic Cluster attributes (modelID + manufacturerName) |
+| Model | LidlRouter (Unsupported) | Z2M device database (no definition for this device) |
+| Firmware ID | 1.0.0 | ZCL Basic Cluster attribute (swBuildId) |
+| Power | Mains (single phase) | ZCL Basic Cluster attribute (powerSource) |
+
+**Zigbee Model vs Model:** The "Zigbee Model" field shows raw values read from the device during interview (modelID and manufacturerName from ZCL Basic Cluster). The "Model" field shows the friendly name from Z2M's device definition database. For supported devices (e.g., Ikea bulbs), these differ. For unsupported devices like this router, Z2M copies the Zigbee Model and shows "Unsupported".
 
 ### About the "Not Supported" Warning
 
@@ -184,8 +208,8 @@ The **"Not supported"** warning in Zigbee2MQTT is **expected and normal** for th
 
 This happens because:
 1. The router firmware only implements the **Basic cluster** (mandatory minimum)
-2. It has no manufacturer name or model identifier configured
-3. Z2M has no device definition file for it
+2. Z2M has no device definition file for "LidlRouter"
+3. A pure router has no controllable features to expose
 
 **This does NOT affect functionality.** The router still:
 - Routes mesh traffic between devices
@@ -224,72 +248,62 @@ The firmware includes a lightweight CLI (~3KB) that allows reflashing without J-
 ```
 ┌─────────────────┐     UART      ┌─────────────────┐
 │   RTL8196E      │───────────────│   EFR32MG1B     │
-│   (Host CPU)    │  PA0/PA1      │   (Zigbee SoC)  │
-│                 │  115200 baud  │                 │
-│  serialgateway  │               │  Router FW      │
-│    port 8888    │               │  + mini-CLI     │
+│   (Host CPU)    │  TX/RX: PA0/PA1   (Zigbee SoC)  │
+│                 │  RTS/CTS: PA4/PA5               │
+│  serialgateway  │  115200 baud  │  Router FW      │
+│    port 8888    │  Flow control │  + mini-CLI     │
 └─────────────────┘               └─────────────────┘
+```
+
+#### Direct usage from remote host (via netcat) — Recommended
+
+This is the preferred method because it provides local echo of typed commands.
+
+```bash
+# Ensure serialgateway is running on the gateway (default after boot)
+
+# From your PC:
+jnilo@jnilo-Key-R:~$ nc 192.168.1.126 8888
+help
+Commands:
+  version           - Show stack version
+  bootloader reboot - Enter bootloader
+  info              - Show device info
+  network status    - Show network status
+  network leave     - Leave current network
+  network steer     - Join an open network
+  help              - Show this help
+> info
+Zigbee Router - EmberZNet 7.5.1
+> network status
+Network: JOINED (channel 11, PAN 0x1A62)
+> version
+stack ver. [7.5.1.0]
+> ^C
+jnilo@jnilo-Key-R:~$ 
 ```
 
 #### Direct usage from the gateway (via SSH)
 
 ```bash
-# Stop serialgateway
-killall serialgateway
-
-# Configure serial port
-stty -F /dev/ttyS1 115200 raw -echo
-
-# Read responses in background
-cat /dev/ttyS1 &
-
-# Send commands
-echo "version" > /dev/ttyS1
-# Output: stack ver. [7.5.1.0]
-
-echo "help" > /dev/ttyS1
-# Output: Commands list
-
-echo "info" > /dev/ttyS1
-# Output: Zigbee Router - EmberZNet 7.5.1
-
-echo "network status" > /dev/ttyS1
-# Output: Network: JOINED (channel 15, PAN 0x1234)
-
-echo "network leave" > /dev/ttyS1
-# Output: Leaving network...
-
-echo "network steer" > /dev/ttyS1
-# Output: Starting network steering...
-
-# Enter bootloader (caution: requires reflash or "2" to exit)
-echo "bootloader reboot" > /dev/ttyS1
-# Output: Rebooting...
-# Then: Gecko Bootloader menu appears
+~ # killall serialgateway
+~ # microcom -s 115200 /dev/ttyS1
+Commands:
+  version           - Show stack version
+  bootloader reboot - Enter bootloader
+  info              - Show device info
+  network status    - Show network status
+  network leave     - Leave current network
+  network steer     - Join an open network
+  help              - Show this help
+> Zigbee Router - EmberZNet 7.5.1
+> Network: JOINED (channel 11, PAN 0x1A62)
+> stack ver. [7.5.1.0]
+>
+# To exit microcom: Ctrl+X
 ```
 
-To exit the Gecko Bootloader and return to the firmware:
-```bash
-echo "2" > /dev/ttyS1   # "2. run" in bootloader menu
-```
-
-#### Direct usage from remote host (via netcat)
-
-```bash
-# On gateway first: killall serialgateway && serialgateway -f
-
-# From your PC:
-nc 192.168.1.X 8888
-# Then type commands interactively:
-# > version
-# stack ver. [7.5.1.0]
-# > help
-# Commands:
-#   version           - Show stack version
-#   bootloader reboot - Enter bootloader
-#   info              - Show device info
-#   help              - Show this help
-```
+**Note:** When using microcom on the gateway, there is no local echo of typed characters (commands `help`, `info`, `network status`, `version` were typed above). Commands still work - just type and press Enter.
 
 #### Usage with `universal-silabs-flasher`
 
@@ -301,19 +315,6 @@ universal-silabs-flasher \
     --device socket://192.168.1.X:8888 \
     flash --firmware new-firmware.gbl
 ```
-
-**Bootloader entry flow:**
-```
-1. Flasher sends "version\r\n"
-2. Mini-CLI responds "stack ver. [7.5.1.0]"
-   → Flasher detects ApplicationType.ROUTER
-3. Flasher sends "bootloader reboot\r\n"
-4. Mini-CLI calls bootloader_rebootAndInstall()
-   → EFR32 reboots into Gecko Bootloader
-5. Flasher uploads firmware via Xmodem
-6. Bootloader writes to flash and reboots
-```
-
 This allows you to reflash the router without physical access. Unlike NCP firmware (which uses EZSP commands), the Router firmware uses CLI commands for bootloader entry.
 
 ### ZCL Configuration
@@ -324,7 +325,10 @@ This allows you to reflash the router without physical access. Unlike NCP firmwa
 
 **Basic Cluster Attributes:**
 - ZCL Version: 0x08
+- Manufacturer Name: Silvercrest
+- Model Identifier: LidlRouter
 - Power Source: 0x01 (Mains)
+- SW Build ID: 1.0.0
 - Cluster Revision: 3
 
 ### Network Parameters
@@ -410,14 +414,28 @@ Zigbee stack init
     ▼
 emberAfMainInitCallback()
     │
-    ▼
-Stack status: NETWORK_DOWN
-    │
-    ▼
-startNetworkSteering()
-    │
-    ▼
-Scan channels, find open network
+    ├──────────────────────────────────┐
+    ▼                                  │
+Wait 3 seconds                         │
+    │                                  │
+    ▼                                  │
+networkSteeringEventHandler()          │
+    │                                  │
+    ▼                                  │
+Already on network? ──Yes──► Done      │
+    │                                  │
+    No                                 │
+    │                                  │
+    ▼                                  │
+Start network steering                 │
+    │                                  │
+    ▼                                  │
+Scan all channels (11-26)              │
+    │                                  │
+    ▼                                  │
+Found beacon? ──No──► Wait 10 sec ─────┘
+    │                        (retry loop)
+    Yes
     │
     ▼
 Join network
@@ -433,16 +451,74 @@ Stack status: NETWORK_UP
 
 ### Router doesn't join
 
-1. **Check permit join** is enabled on coordinator
-2. **Verify channel** - Some coordinators only use specific channels
+#### Quick checklist
+
+1. **Check permit join** is enabled on coordinator and stays enabled for at least 20 seconds
+2. **Verify Z2M is running** - The coordinator must be active to respond to beacons
 3. **Check distance** - Move closer to coordinator for initial join
-4. **Reset NVM** - Flash firmware again to clear stored network data
+4. **Wait for retry** - The router retries every 10 seconds automatically
+
+#### Debugging via Mini-CLI
+
+Connect to the router's serial console to see what's happening:
+
+```bash
+# On the gateway via SSH:
+killall serialgateway
+microcom -s 115200 /dev/ttyS1
+# To exit microcom: Ctrl+X
+
+# Or from remote host (if serialgateway is running):
+nc 192.168.1.X 8888
+# To exit nc: Ctrl+C
+```
+
+Then use these commands:
+
+| Command | Expected result |
+|---------|-----------------|
+| `network status` | Shows `JOINED` or `NOT JOINED` |
+| `network steer` | Manually triggers join attempt |
+
+#### Common error codes
+
+| Error | Meaning | Solution |
+|-------|---------|----------|
+| `0x70` | EMBER_NO_BEACONS - No coordinator found | Enable permit join on Z2M and wait for retry |
+| `0x93` | EMBER_NO_NETWORK_KEY_RECEIVED | Network security issue - try erasing chip and reflashing |
+
+#### Reset NVM (clear stored network data)
+
+If the router was previously joined to a different network, it may need a full erase:
+
+**Via J-Link:**
+```bash
+commander device masserase --device EFR32MG1B232F256GM48
+commander flash firmware/z3-router-7.5.1.s37 --device EFR32MG1B232F256GM48
+```
+
+**Via UART:** Flash the firmware again with `universal-silabs-flasher` - this erases the NVM.
 
 ### Router joins but doesn't route
 
 1. **Wait** - Route discovery takes time (minutes)
 2. **Check coordinator** - Some need "interview" to complete
 3. **Verify in network map** - Router should show connections
+
+### After reflashing, Z2M shows old device info (Model, Firmware ID)
+
+Z2M caches device attributes from the initial interview. If you reflash the router with modified attributes (Model Identifier, SW Build ID, etc.), Z2M will still show the old values.
+
+**Solution:** Force a re-interview in Z2M:
+
+1. Go to the device page in Z2M web UI
+2. Click the **"Interview"** button (or "Reconfigure" in some versions)
+3. Wait for the interview to complete
+
+Alternatively, delete the device from Z2M and let it rejoin:
+1. Remove the device in Z2M
+2. On the router, run `network leave` then `network steer`
+3. The router will rejoin with fresh attribute values
 
 ### Build fails with "zap-config.h not found"
 
