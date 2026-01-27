@@ -10,13 +10,13 @@ case "$1" in
 start)
 
     echo "🚀 Starting serialgateway..."
-    serialgateway >/dev/null 2>&1 &
+    serialgateway
     ;;
 
 stop)
 
     echo "🛑 Stopping serialgateway..."
-    killall serialgateway 2>/dev/null
+    killall serialgateway
     ;;
 
 restart)
