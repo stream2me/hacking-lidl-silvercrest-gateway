@@ -29,6 +29,9 @@ struct rtl8196e_ring {
 	unsigned int tx_prod;
 	unsigned int tx_cons;
 	unsigned int rx_idx;
+	unsigned int last_tx_submit;
+	unsigned int rx_debug_once;
+	unsigned int rx_debug_bad;
 	size_t buf_size;
 	struct rtl8196e_pool *pool;
 	spinlock_t tx_lock;
@@ -119,6 +122,9 @@ struct rtl8196e_ring *rtl8196e_ring_create(struct rtl8196e_pool *pool,
 		mb->skb = NULL;
 
 		ring->tx_ring[i] = (u32)ph | RTL8196E_DESC_RISC_OWNED;
+
+		dma_cache_wback_inv((unsigned long)ph, sizeof(*ph));
+		dma_cache_wback_inv((unsigned long)mb, sizeof(*mb));
 	}
 	if (tx_cnt)
 		ring->tx_ring[tx_cnt - 1] |= RTL8196E_DESC_WRAP;
@@ -152,6 +158,10 @@ struct rtl8196e_ring *rtl8196e_ring_create(struct rtl8196e_pool *pool,
 
 		ring->rx_pkthdr_ring[i] = (u32)ph | RTL8196E_DESC_SWCORE_OWNED;
 		ring->rx_mbuf_ring[i] = (u32)mb | RTL8196E_DESC_SWCORE_OWNED;
+
+		dma_cache_wback_inv((unsigned long)mb->m_extbuf, buf_size);
+		dma_cache_wback_inv((unsigned long)ph, sizeof(*ph));
+		dma_cache_wback_inv((unsigned long)mb, sizeof(*mb));
 	}
 	if (rx_cnt)
 		ring->rx_pkthdr_ring[rx_cnt - 1] |= RTL8196E_DESC_WRAP;
@@ -242,6 +252,7 @@ int rtl8196e_ring_tx_submit(struct rtl8196e_ring *ring, void *skb,
 
 	ph = rtl8196e_desc_ptr(ring->tx_ring[ring->tx_prod]);
 	mb = ph->ph_mbuf;
+	ring->last_tx_submit = ring->tx_prod;
 
 	mb->m_len = len;
 	mb->m_extsize = len;
@@ -251,7 +262,7 @@ int rtl8196e_ring_tx_submit(struct rtl8196e_ring *ring, void *skb,
 
 	ph->ph_len = len;
 	ph->ph_vlanId = vid;
-	ph->ph_portlist = portlist & 0x1f;
+	ph->ph_portlist = portlist & 0x3f;
 	ph->ph_srcExtPortNum = 0;
 	ph->ph_flags = flags;
 
@@ -282,11 +293,14 @@ int rtl8196e_ring_tx_reclaim(struct rtl8196e_ring *ring,
 		return 0;
 
 	while (ring->tx_cons != ring->tx_prod) {
-		u32 entry = ring->tx_ring[ring->tx_cons];
+		u32 entry;
 		struct rtl_pktHdr *ph;
 		struct rtl_mBuf *mb;
 		struct sk_buff *skb;
 
+		dma_cache_inv((unsigned long)&ring->tx_ring[ring->tx_cons], sizeof(u32));
+		rmb();
+		entry = ring->tx_ring[ring->tx_cons];
 		if (entry & RTL8196E_DESC_OWNED_BIT)
 			break;
 
@@ -351,7 +365,7 @@ int rtl8196e_ring_rx_poll(struct rtl8196e_ring *ring, int budget,
 
 		len = ph->ph_len;
 		if (len < ETH_ZLEN || len > ring->buf_size)
-			goto rearm;
+			goto rearm_bad;
 		skb->tail = skb->data;
 		skb->len = 0;
 		skb_put(skb, len);
@@ -362,6 +376,11 @@ int rtl8196e_ring_rx_poll(struct rtl8196e_ring *ring, int budget,
 		}
 		skb->protocol = eth_type_trans(skb, dev);
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		if (dev && ring->rx_debug_once == 0) {
+			ring->rx_debug_once = 1;
+			netdev_info(dev, "rx first len=%u flags=0x%04x port=0x%02x vid=%u\n",
+				    len, ph->ph_flags, ph->ph_portlist, ph->ph_vlanId);
+		}
 
 		/* Install new buffer */
 		mb->m_data = new_skb->data;
@@ -374,6 +393,14 @@ int rtl8196e_ring_rx_poll(struct rtl8196e_ring *ring, int budget,
 
 		napi_gro_receive(napi, skb);
 		work_done++;
+		goto rearm;
+
+rearm_bad:
+		if (dev && ring->rx_debug_bad < 3) {
+			ring->rx_debug_bad++;
+			netdev_warn(dev, "rx bad len=%u flags=0x%04x port=0x%02x vid=%u\n",
+				    len, ph->ph_flags, ph->ph_portlist, ph->ph_vlanId);
+		}
 
 rearm:
 		mbuf_index = (unsigned int)(mb - ring->rx_mbuf_base);
@@ -383,6 +410,8 @@ rearm:
 		ring->rx_pkthdr_ring[ring->rx_idx] =
 			(u32)ph | (ring->rx_pkthdr_ring[ring->rx_idx] & RTL8196E_DESC_WRAP) | RTL8196E_DESC_SWCORE_OWNED;
 
+		if (mb->m_extbuf)
+			dma_cache_wback_inv((unsigned long)mb->m_extbuf, ring->buf_size);
 		dma_cache_wback_inv((unsigned long)ph, sizeof(*ph));
 		dma_cache_wback_inv((unsigned long)mb, sizeof(*mb));
 
@@ -413,8 +442,7 @@ void rtl8196e_ring_kick_tx(bool was_empty)
 {
 	u32 icr;
 
-	if (!was_empty)
-		return;
+	(void)was_empty;
 
 	icr = *(volatile u32 *)CPUICR;
 	*(volatile u32 *)CPUICR = icr | TXFD;
@@ -423,4 +451,90 @@ void rtl8196e_ring_kick_tx(bool was_empty)
 	*(volatile u32 *)CPUICR = icr;
 	mb();
 	(void)*(volatile u32 *)CPUICR;
+}
+
+void rtl8196e_ring_tx_reset(struct rtl8196e_ring *ring)
+{
+	unsigned int i;
+
+	if (!ring)
+		return;
+
+	for (i = 0; i < ring->tx_cnt; i++) {
+		struct rtl_pktHdr *ph = &ring->pkthdr_pool[i];
+		struct rtl_mBuf *mb = &ring->mbuf_pool[i];
+
+		if (mb->skb) {
+			dev_kfree_skb_any((struct sk_buff *)mb->skb);
+			mb->skb = NULL;
+		}
+
+		memset(ph, 0, sizeof(*ph));
+		memset(mb, 0, sizeof(*mb));
+
+		ph->ph_mbuf = mb;
+		ph->ph_flags = PKTHDR_USED | PKT_OUTGOING;
+		ph->ph_type = PKTHDR_ETHERNET;
+		ph->ph_portlist = 0;
+
+		mb->m_pkthdr = ph;
+		mb->m_flags = MBUF_USED | MBUF_EXT | MBUF_PKTHDR | MBUF_EOR;
+		mb->m_data = NULL;
+		mb->m_extbuf = NULL;
+		mb->m_extsize = 0;
+
+		ring->tx_ring[i] = (u32)ph | RTL8196E_DESC_RISC_OWNED;
+
+		dma_cache_wback_inv((unsigned long)ph, sizeof(*ph));
+		dma_cache_wback_inv((unsigned long)mb, sizeof(*mb));
+	}
+
+	if (ring->tx_cnt)
+		ring->tx_ring[ring->tx_cnt - 1] |= RTL8196E_DESC_WRAP;
+
+	ring->tx_prod = 0;
+	ring->tx_cons = 0;
+	ring->last_tx_submit = 0;
+}
+
+unsigned int rtl8196e_ring_last_tx_submit(struct rtl8196e_ring *ring)
+{
+	if (!ring)
+		return 0;
+	return ring->last_tx_submit;
+}
+
+unsigned int rtl8196e_ring_tx_count(struct rtl8196e_ring *ring)
+{
+	if (!ring)
+		return 0;
+	return ring->tx_cnt;
+}
+
+u32 rtl8196e_ring_tx_entry(struct rtl8196e_ring *ring, unsigned int idx)
+{
+	if (!ring || idx >= ring->tx_cnt)
+		return 0;
+	return ring->tx_ring[idx];
+}
+
+unsigned int rtl8196e_ring_rx_index(struct rtl8196e_ring *ring)
+{
+	if (!ring)
+		return 0;
+	return ring->rx_idx;
+}
+
+u32 rtl8196e_ring_rx_pkthdr_entry(struct rtl8196e_ring *ring, unsigned int idx)
+{
+	if (!ring || idx >= ring->rx_cnt)
+		return 0;
+	return ring->rx_pkthdr_ring[idx];
+}
+
+u32 rtl8196e_ring_rx_mbuf_entry(struct rtl8196e_ring *ring, unsigned int idx)
+{
+	if (!ring || idx >= ring->rx_mbuf_cnt)
+		return 0;
+	return ring->rx_mbuf_ring[idx];
 }

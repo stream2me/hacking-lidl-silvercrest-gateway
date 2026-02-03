@@ -88,8 +88,8 @@
 		/* VLAN configuration */
 		vlan-id = <1>;              /* VLAN ID (VID) */
 		forwarding-id = <0>;        /* Forwarding database ID (FID) */
-		member-ports = <0x10>;      /* Port mask: 0x10 = port 4 (bit 4 set) */
-		untag-ports = <0x10>;       /* Untagged port mask: port 4 untagged */
+		member-ports = <0x04>;      /* Port mask: 0x04 = port 2 (bit 2 set) */
+		untag-ports = <0x04>;       /* Untagged port mask: port 2 untagged */
 		is-wan = <0>;               /* 0 = LAN interface, 1 = WAN interface */
 		mtu = <1500>;               /* Maximum transmission unit */
 	};

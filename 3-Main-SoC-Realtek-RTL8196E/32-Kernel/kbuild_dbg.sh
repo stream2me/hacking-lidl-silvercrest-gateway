@@ -28,6 +28,8 @@ TOOLCHAIN_DIR="${PROJECT_ROOT}/x-tools/mips-lexra-linux-musl"
 export PATH="${TOOLCHAIN_DIR}/bin:$PATH"
 export ARCH=mips
 export CROSS_COMPILE=mips-lexra-linux-musl-
+export LOCALVERSION="-rtl8196e-eth"
+export KBUILD_BUILD_VERSION="$(date +%s)"
 
 BUILD_VMLINUX_ONLY=false
 DO_MENUCONFIG=false

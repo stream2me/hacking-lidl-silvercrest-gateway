@@ -9,6 +9,7 @@
 #include <linux/timer.h>
 #include <linux/errno.h>
 #include <linux/ethtool.h>
+#include <asm/cacheflush.h>
 #include "rtl8196e_dt.h"
 #include "rtl8196e_hw.h"
 #include "rtl8196e_ring.h"
@@ -32,6 +33,18 @@ static unsigned int link_poll_ms;
 module_param(link_poll_ms, uint, 0644);
 MODULE_PARM_DESC(link_poll_ms, "Link poll interval in ms (0=disabled)");
 
+static unsigned int rtl8196e_debug;
+module_param(rtl8196e_debug, uint, 0644);
+MODULE_PARM_DESC(rtl8196e_debug, "Enable extra debug logging (default=0)");
+
+static unsigned int rtl8196e_force_trap;
+module_param(rtl8196e_force_trap, uint, 0644);
+MODULE_PARM_DESC(rtl8196e_force_trap, "Force all unknown traffic to CPU (debug)");
+
+static unsigned int rtl8196e_cpu_port_mask = RTL8196E_CPU_PORT_MASK;
+module_param(rtl8196e_cpu_port_mask, uint, 0644);
+MODULE_PARM_DESC(rtl8196e_cpu_port_mask, "CPU port mask for VLAN/L2 (default=0x100)");
+
 struct rtl8196e_priv {
 	struct net_device *ndev;
 	struct napi_struct napi;
@@ -41,6 +54,7 @@ struct rtl8196e_priv {
 	struct rtl8196e_dt_iface iface;
 	struct timer_list tx_timer;
 	struct timer_list link_timer;
+	struct timer_list dbg_timer;
 	atomic_t tx_pending;
 	u16 vlan_id;
 	u16 portmask;
@@ -50,6 +64,13 @@ struct rtl8196e_priv {
 	u32 l2_check_ok;
 	u32 l2_check_fail;
 	int l2_check_last;
+	u32 tx_debug_once;
+	u32 tx_dbg_portmask;
+	u32 tx_dbg_vid;
+	u32 tx_dbg_len;
+	u32 tx_dbg_submit;
+	u32 dbg_tx_idx;
+	u32 dbg_irqs;
 };
 
 static int rtl8196e_port_from_mask(u16 mask)
@@ -109,6 +130,83 @@ static void rtl8196e_link_timer_fn(struct timer_list *t)
 		mod_timer(&priv->link_timer, jiffies + msecs_to_jiffies(priv->link_poll_ms));
 }
 
+static void rtl8196e_dbg_timer_fn(struct timer_list *t)
+{
+	struct rtl8196e_priv *priv = from_timer(priv, t, dbg_timer);
+	struct rtl8196e_ring *ring = priv->ring;
+	u32 idx = priv->dbg_tx_idx;
+	u32 rx_idx;
+	u32 entry = 0;
+	u32 rx_entry = 0;
+	u32 rx_mbuf_entry = 0;
+	struct rtl_pktHdr *ph = NULL;
+	struct rtl_pktHdr *rx_ph = NULL;
+	struct rtl_mBuf *rx_mb = NULL;
+	u32 isr, imr, icr;
+
+	if (!rtl8196e_debug || !ring)
+		return;
+
+	if (idx < rtl8196e_ring_tx_count(ring))
+		entry = rtl8196e_ring_tx_entry(ring, idx);
+
+	rx_idx = rtl8196e_ring_rx_index(ring);
+	rx_entry = rtl8196e_ring_rx_pkthdr_entry(ring, rx_idx);
+	rx_mbuf_entry = rtl8196e_ring_rx_mbuf_entry(ring, rx_idx);
+
+	isr = *(volatile u32 *)CPUIISR;
+	imr = *(volatile u32 *)CPUIIMR;
+	icr = *(volatile u32 *)CPUICR;
+
+	if (entry)
+		ph = (struct rtl_pktHdr *)(entry & ~(RTL8196E_DESC_OWNED_BIT | RTL8196E_DESC_WRAP));
+	if (ph)
+		dma_cache_inv((unsigned long)ph, sizeof(*ph));
+
+	netdev_info(priv->ndev,
+		    "dbg: CPUICR=0x%08x CPUIIMR=0x%08x CPUIISR=0x%08x\n",
+		    icr, imr, isr);
+	netdev_info(priv->ndev,
+		    "dbg: CPUTPDCR0=0x%08x CPURPDCR0=0x%08x CPURMDCR0=0x%08x\n",
+		    *(volatile u32 *)CPUTPDCR0,
+		    *(volatile u32 *)CPURPDCR0,
+		    *(volatile u32 *)CPURMDCR0);
+	netdev_info(priv->ndev,
+		    "dbg: CPUQDM0=0x%08x CPUQDM2=0x%08x CPUQDM4=0x%08x\n",
+		    *(volatile u32 *)CPUQDM0,
+		    *(volatile u32 *)CPUQDM2,
+		    *(volatile u32 *)CPUQDM4);
+
+	if (ph) {
+		netdev_info(priv->ndev,
+			    "dbg: TX idx=%u entry=0x%08x own=%u len=%u flags=0x%04x port=0x%02x vid=%u\n",
+			    idx, entry, entry & RTL8196E_DESC_OWNED_BIT ? 1 : 0,
+			    ph->ph_len, ph->ph_flags, ph->ph_portlist, ph->ph_vlanId);
+	}
+
+	if (rx_entry) {
+		rx_ph = (struct rtl_pktHdr *)(rx_entry & ~(RTL8196E_DESC_OWNED_BIT | RTL8196E_DESC_WRAP));
+		if (!(rx_entry & RTL8196E_DESC_OWNED_BIT) && rx_ph)
+			dma_cache_inv((unsigned long)rx_ph, sizeof(*rx_ph));
+	}
+	if (rx_mbuf_entry) {
+		rx_mb = (struct rtl_mBuf *)(rx_mbuf_entry & ~(RTL8196E_DESC_OWNED_BIT | RTL8196E_DESC_WRAP));
+		if (!(rx_mbuf_entry & RTL8196E_DESC_OWNED_BIT) && rx_mb)
+			dma_cache_inv((unsigned long)rx_mb, sizeof(*rx_mb));
+	}
+
+	netdev_info(priv->ndev,
+		    "dbg: RX idx=%u entry=0x%08x own=%u mbuf=0x%08x own=%u\n",
+		    rx_idx,
+		    rx_entry, rx_entry & RTL8196E_DESC_OWNED_BIT ? 1 : 0,
+		    rx_mbuf_entry, rx_mbuf_entry & RTL8196E_DESC_OWNED_BIT ? 1 : 0);
+	if (rx_ph && !(rx_entry & RTL8196E_DESC_OWNED_BIT)) {
+		netdev_info(priv->ndev,
+			    "dbg: RX ph len=%u flags=0x%04x port=0x%02x vid=%u\n",
+			    rx_ph->ph_len, rx_ph->ph_flags, rx_ph->ph_portlist, rx_ph->ph_vlanId);
+	}
+}
+
 static int rtl8196e_open(struct net_device *ndev)
 {
 	struct rtl8196e_priv *priv = netdev_priv(ndev);
@@ -127,14 +225,32 @@ static int rtl8196e_open(struct net_device *ndev)
 		napi_disable(&priv->napi);
 		return ret;
 	}
+	ret = rtl8196e_hw_vlan_setup(&priv->hw, priv->vlan_id, 0,
+				     priv->portmask | rtl8196e_cpu_port_mask,
+				     priv->iface.untag_ports);
+	if (ret)
+		netdev_warn(ndev, "VLAN setup failed (%d)\n", ret);
+	ret = rtl8196e_hw_netif_setup(&priv->hw, ndev->dev_addr,
+				      priv->vlan_id, ndev->mtu,
+				      priv->portmask | rtl8196e_cpu_port_mask);
+	if (ret)
+		netdev_warn(ndev, "NETIF setup failed (%d)\n", ret);
 	rtl8196e_hw_l2_setup(&priv->hw);
-	ret = rtl8196e_hw_l2_add_cpu_entry(&priv->hw, ndev->dev_addr, 0);
+	if (rtl8196e_force_trap) {
+		netdev_warn(ndev, "L2 trap-all debug enabled\n");
+		rtl8196e_hw_l2_trap_enable(&priv->hw);
+	}
+	ret = rtl8196e_hw_l2_add_cpu_entry(&priv->hw, ndev->dev_addr, 0, 0);
 	if (ret) {
 		priv->l2_check_last = ret;
 		priv->l2_check_fail++;
 		netdev_warn(ndev, "L2 toCPU entry failed (%d), enabling trap fallback\n", ret);
 		rtl8196e_hw_l2_trap_enable(&priv->hw);
 	} else {
+		ret = rtl8196e_hw_l2_add_bcast_entry(&priv->hw, 0,
+						     priv->portmask | rtl8196e_cpu_port_mask);
+		if (ret)
+			netdev_warn(ndev, "L2 broadcast entry failed (%d)\n", ret);
 		ret = rtl8196e_hw_l2_check_cpu_entry(&priv->hw, ndev->dev_addr, 0);
 		if (ret) {
 			priv->l2_check_last = ret;
@@ -172,6 +288,7 @@ static int rtl8196e_stop(struct net_device *ndev)
 	napi_disable(&priv->napi);
 	del_timer_sync(&priv->tx_timer);
 	del_timer_sync(&priv->link_timer);
+	del_timer_sync(&priv->dbg_timer);
 	netif_carrier_off(ndev);
 
 	return 0;
@@ -184,6 +301,7 @@ static netdev_tx_t rtl8196e_start_xmit(struct sk_buff *skb, struct net_device *n
 	bool was_empty = false;
 	int ret;
 	int free_count;
+	u32 debug_val;
 
 	if (!priv->ring || !priv->portmask) {
 		dev_kfree_skb_any(skb);
@@ -201,15 +319,30 @@ static netdev_tx_t rtl8196e_start_xmit(struct sk_buff *skb, struct net_device *n
 					     priv->vlan_id, priv->portmask,
 					     PKTHDR_USED | PKT_OUTGOING,
 					     &was_empty);
+	debug_val = READ_ONCE(priv->tx_debug_once);
+	if (debug_val == 0) {
+		WRITE_ONCE(priv->tx_debug_once, 1);
+		priv->tx_dbg_portmask = priv->portmask;
+		priv->tx_dbg_vid = priv->vlan_id;
+		priv->tx_dbg_len = skb->len;
+		priv->tx_dbg_submit = (ret == 0);
+		priv->dbg_tx_idx = rtl8196e_ring_last_tx_submit(priv->ring);
+		netdev_info(ndev, "xmit first packet len=%u portmask=0x%x vid=%u\n",
+			    skb->len, priv->portmask, priv->vlan_id);
+		if (rtl8196e_debug)
+			mod_timer(&priv->dbg_timer, jiffies + msecs_to_jiffies(200));
+	}
 	if (ret < 0) {
 		unsigned int pkts = 0, bytes = 0;
 
+		netdev_warn(ndev, "xmit submit failed (%d), reclaiming\n", ret);
 		rtl8196e_ring_tx_reclaim(priv->ring, &pkts, &bytes);
 		ret = rtl8196e_ring_tx_submit(priv->ring, skb, skb->data, skb->len,
 					     priv->vlan_id, priv->portmask,
 					     PKTHDR_USED | PKT_OUTGOING,
 					     &was_empty);
 		if (ret < 0) {
+			netdev_warn(ndev, "xmit submit still failed (%d)\n", ret);
 			atomic_set(&priv->tx_pending, 1);
 			mod_timer(&priv->tx_timer, jiffies + msecs_to_jiffies(RTL8196E_TX_TIMER_MS));
 			netif_stop_queue(ndev);
@@ -236,7 +369,27 @@ static netdev_tx_t rtl8196e_start_xmit(struct sk_buff *skb, struct net_device *n
 
 static void rtl8196e_tx_timeout(struct net_device *ndev, unsigned int txqueue)
 {
+	struct rtl8196e_priv *priv = netdev_priv(ndev);
+	unsigned int pkts = 0, bytes = 0;
+
 	netdev_warn(ndev, "TX timeout\n");
+
+	if (!priv->ring)
+		return;
+
+	netif_stop_queue(ndev);
+	rtl8196e_hw_disable_irqs(&priv->hw);
+	rtl8196e_hw_stop(&priv->hw);
+
+	rtl8196e_ring_tx_reclaim(priv->ring, &pkts, &bytes);
+	rtl8196e_ring_tx_reset(priv->ring);
+	rtl8196e_hw_set_tx_ring(&priv->hw, rtl8196e_ring_tx_desc_base(priv->ring));
+
+	rtl8196e_hw_start(&priv->hw);
+	rtl8196e_hw_enable_irqs(&priv->hw);
+
+	atomic_set(&priv->tx_pending, 0);
+	netif_wake_queue(ndev);
 }
 
 static int rtl8196e_poll(struct napi_struct *napi, int budget)
@@ -272,6 +425,10 @@ static irqreturn_t rtl8196e_isr(int irq, void *dev_id)
 	bool link;
 
 	status = *(volatile u32 *)CPUIISR;
+	if (rtl8196e_debug && priv->dbg_irqs < 3) {
+		netdev_info(ndev, "dbg: ISR status=0x%08x\n", status);
+		priv->dbg_irqs++;
+	}
 	*(volatile u32 *)CPUIISR = status;
 	status &= *(volatile u32 *)CPUIIMR;
 
@@ -304,7 +461,7 @@ static int rtl8196e_get_sset_count(struct net_device *ndev, int sset)
 {
 	(void)ndev;
 	if (sset == ETH_SS_STATS)
-		return 3;
+		return 7;
 	return -EOPNOTSUPP;
 }
 
@@ -314,6 +471,10 @@ static void rtl8196e_get_strings(struct net_device *ndev, u32 sset, u8 *data)
 		"rtl8196e_l2_check_ok",
 		"rtl8196e_l2_check_fail",
 		"rtl8196e_l2_check_last_result",
+		"rtl8196e_tx_dbg_portmask",
+		"rtl8196e_tx_dbg_vid",
+		"rtl8196e_tx_dbg_len",
+		"rtl8196e_tx_dbg_submit",
 	};
 
 	(void)ndev;
@@ -332,6 +493,10 @@ static void rtl8196e_get_ethtool_stats(struct net_device *ndev,
 	data[0] = priv->l2_check_ok;
 	data[1] = priv->l2_check_fail;
 	data[2] = priv->l2_check_last;
+	data[3] = priv->tx_dbg_portmask;
+	data[4] = priv->tx_dbg_vid;
+	data[5] = priv->tx_dbg_len;
+	data[6] = priv->tx_dbg_submit;
 }
 
 static const struct ethtool_ops rtl8196e_ethtool_ops = {
@@ -393,6 +558,7 @@ static int rtl8196e_probe(struct platform_device *pdev)
 
 	timer_setup(&priv->tx_timer, rtl8196e_tx_timer_fn, 0);
 	timer_setup(&priv->link_timer, rtl8196e_link_timer_fn, 0);
+	timer_setup(&priv->dbg_timer, rtl8196e_dbg_timer_fn, 0);
 	atomic_set(&priv->tx_pending, 0);
 
 	netif_napi_add(ndev, &priv->napi, rtl8196e_poll, 64);

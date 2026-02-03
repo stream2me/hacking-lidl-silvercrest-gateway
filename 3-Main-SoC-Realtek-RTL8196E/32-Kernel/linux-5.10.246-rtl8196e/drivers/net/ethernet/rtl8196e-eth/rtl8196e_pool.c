@@ -10,6 +10,14 @@
 #define RTL8196E_POOL_MAGIC_LEN 4
 #define RTL8196E_PRIV_DATA_SIZE 128
 
+static inline size_t rtl8196e_skb_alloc_size(size_t payload)
+{
+	size_t data_len = SKB_DATA_ALIGN(payload + RTL8196E_PRIV_DATA_SIZE + NET_SKB_PAD);
+	size_t shinfo_len = SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+
+	return data_len + shinfo_len;
+}
+
 struct rtl8196e_pool_buf {
 	char magic[RTL8196E_POOL_MAGIC_LEN];
 	void *buf_pointer;
@@ -32,6 +40,8 @@ static struct sk_buff *rtl8196e_build_skb(unsigned char *data, int size)
 {
 	struct sk_buff *skb;
 	struct skb_shared_info *shinfo;
+	size_t alloc_size;
+	size_t data_size;
 
 	if (!data)
 		return NULL;
@@ -40,26 +50,24 @@ static struct sk_buff *rtl8196e_build_skb(unsigned char *data, int size)
 	if (!skb)
 		return NULL;
 
-	memset(skb, 0, offsetof(struct sk_buff, truesize));
+	memset(skb, 0, offsetof(struct sk_buff, tail));
 	refcount_set(&skb->users, 1);
 	skb->head = data;
 	skb->data = data;
-	skb->tail = data;
+	skb_reset_tail_pointer(skb);
 
-	size = SKB_DATA_ALIGN(size + RTL8196E_PRIV_DATA_SIZE + NET_SKB_PAD);
-	skb->end = data + size;
-	skb->truesize = size + sizeof(struct sk_buff);
+	alloc_size = rtl8196e_skb_alloc_size(size);
+	data_size = alloc_size - SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	skb->end = skb->tail + data_size;
+	skb->truesize = SKB_TRUESIZE(data_size);
+	skb->mac_header = (typeof(skb->mac_header))~0U;
+	skb->transport_header = (typeof(skb->transport_header))~0U;
 
 	shinfo = skb_shinfo(skb);
+	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
 	atomic_set(&shinfo->dataref, 1);
-	shinfo->nr_frags = 0;
-	shinfo->gso_size = 0;
-	shinfo->gso_segs = 0;
-	shinfo->gso_type = 0;
-	shinfo->frag_list = NULL;
 
-	skb->head_frag = 0;
-	skb_reserve(skb, RTL8196E_PRIV_DATA_SIZE);
+	skb_reserve(skb, RTL8196E_PRIV_DATA_SIZE + NET_SKB_PAD);
 
 	return skb;
 }
@@ -80,13 +88,13 @@ struct rtl8196e_pool *rtl8196e_pool_create(size_t buf_size, int count)
 	}
 
 	spin_lock_init(&pool->lock);
-	pool->buf_size = buf_size;
+	pool->buf_size = rtl8196e_skb_alloc_size(buf_size);
 	pool->count = count;
 	pool->free_count = 0;
 
 	for (i = 0; i < count; i++) {
 		struct rtl8196e_pool_buf *b;
-		b = kmalloc(sizeof(*b) + buf_size, GFP_KERNEL | GFP_DMA);
+		b = kmalloc(sizeof(*b) + pool->buf_size, GFP_KERNEL | GFP_DMA);
 		if (!b)
 			break;
 		memcpy(b->magic, RTL8196E_POOL_MAGIC, RTL8196E_POOL_MAGIC_LEN);
