@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
+/*
+ * RTL8196E device-tree parsing helpers.
+ *
+ * Reads minimal interface configuration from DT to configure VLAN/ports.
+ */
 #include <linux/device.h>
 #include <linux/of.h>
 #include <linux/of_net.h>
@@ -6,6 +11,10 @@
 #include <linux/if_ether.h>
 #include "rtl8196e_dt.h"
 
+/**
+ * rtl8196e_dt_defaults() - Fill interface defaults.
+ * @iface: Interface configuration to initialize.
+ */
 static void rtl8196e_dt_defaults(struct rtl8196e_dt_iface *iface)
 {
 	strscpy(iface->ifname, "eth0", sizeof(iface->ifname));
@@ -20,6 +29,12 @@ static void rtl8196e_dt_defaults(struct rtl8196e_dt_iface *iface)
 	iface->link_poll_ms_set = false;
 }
 
+/**
+ * rtl8196e_dt_find_iface() - Locate the primary interface node.
+ * @np: Ethernet device node.
+ *
+ * Return: Interface node or NULL if not found.
+ */
 static struct device_node *rtl8196e_dt_find_iface(struct device_node *np)
 {
 	struct device_node *child;
@@ -38,6 +53,13 @@ static struct device_node *rtl8196e_dt_find_iface(struct device_node *np)
 	return NULL;
 }
 
+/**
+ * rtl8196e_dt_parse() - Parse device-tree properties for the driver.
+ * @dev: Device pointer.
+ * @iface: Output interface configuration.
+ *
+ * Return: 0 on success, negative errno otherwise.
+ */
 int rtl8196e_dt_parse(struct device *dev, struct rtl8196e_dt_iface *iface)
 {
 	struct device_node *np = dev->of_node;
@@ -64,6 +86,7 @@ int rtl8196e_dt_parse(struct device *dev, struct rtl8196e_dt_iface *iface)
 
 	mac = of_get_mac_address(if_np);
 	if (mac) {
+		/* DT MAC overrides any persistent config. */
 		memcpy(iface->mac, mac, ETH_ALEN);
 		iface->mac_set = true;
 	}

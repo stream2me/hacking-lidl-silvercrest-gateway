@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * RTL8196E register definitions used by the minimal driver.
+ */
 #ifndef RTL8196E_REGS_H
 #define RTL8196E_REGS_H
 
@@ -11,6 +14,12 @@
 
 #define RTL8196E_UNCACHE_MASK 0x20000000
 
+/**
+ * rtl8196e_uncached_addr() - Convert cached pointer to KSEG1 alias.
+ * @p: Cached pointer.
+ *
+ * Return: Uncached KSEG1 address.
+ */
 static inline void *rtl8196e_uncached_addr(void *p)
 {
 	return (void *)((unsigned long)p | RTL8196E_UNCACHE_MASK);

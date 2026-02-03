@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * RTL8196E descriptor ring interface.
+ */
 #ifndef RTL8196E_RING_H
 #define RTL8196E_RING_H
 

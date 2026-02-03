@@ -6,7 +6,7 @@
 - Performances maximales (zero-copy RX/TX).
 - Compatibilite DT existante (node `ethernet` + `interface@0`).
 - IPv4 et IPv6 via le stack Linux (aucun traitement special dans le driver).
-- NAPI + interruptions, ethtool stats de base.
+- NAPI + interruptions.
 
 ## 2. Non-objectifs
 - QoS / files multiples / netfilter offload / L3-L4 HW.
@@ -45,7 +45,7 @@
 
 ## 6. Architecture fichiers (nouveau repertoire)
 - `rtl8196e_main.c`
-  - net_device, NAPI, IRQ, ethtool, stats, start_xmit, poll.
+  - net_device, NAPI, IRQ, stats, start_xmit, poll.
 - `rtl8196e_hw.c` / `rtl8196e_hw.h`
   - MMIO regs, init sequence, KSEG1 helpers, L2 toCPU, PHY basics.
 - `rtl8196e_ring.c` / `rtl8196e_ring.h`
@@ -108,6 +108,4 @@
 - Ping IPv4/IPv6
 - SSH stable
 - iperf TCP (TX/RX) >= 80 Mbps sur RX, gap TX < 10%
-- `ethtool -S` (ring, pool, tx_full)
 - Pas de warnings `rx_pool_empty_events`.
-

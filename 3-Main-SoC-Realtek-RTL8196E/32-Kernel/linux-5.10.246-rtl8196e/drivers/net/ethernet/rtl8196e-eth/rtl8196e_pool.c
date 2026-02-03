@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
+/*
+ * RTL8196E private RX buffer pool.
+ *
+ * Maintains a stable-address buffer pool and builds SKBs on top of it to
+ * match hardware expectations and avoid realloc/free churn.
+ */
 #include <linux/slab.h>
 #include <linux/skbuff.h>
 #include <linux/spinlock.h>
@@ -10,6 +16,12 @@
 #define RTL8196E_POOL_MAGIC_LEN 4
 #define RTL8196E_PRIV_DATA_SIZE 128
 
+/**
+ * rtl8196e_skb_alloc_size() - Compute total allocation size for an SKB.
+ * @payload: Payload length in bytes.
+ *
+ * Return: Total allocation size for SKB data + shared info.
+ */
 static inline size_t rtl8196e_skb_alloc_size(size_t payload)
 {
 	size_t data_len = SKB_DATA_ALIGN(payload + RTL8196E_PRIV_DATA_SIZE + NET_SKB_PAD);
@@ -33,9 +45,16 @@ struct rtl8196e_pool {
 	int free_count;
 };
 
-/* External cache for sk_buff struct allocation */
+/* External cache for sk_buff struct allocation. */
 extern struct kmem_cache *skbuff_head_cache;
 
+/**
+ * rtl8196e_build_skb() - Build an SKB around a preallocated data buffer.
+ * @data: Buffer start.
+ * @size: Buffer size.
+ *
+ * Return: New SKB or NULL on failure.
+ */
 static struct sk_buff *rtl8196e_build_skb(unsigned char *data, int size)
 {
 	struct sk_buff *skb;
@@ -46,6 +65,7 @@ static struct sk_buff *rtl8196e_build_skb(unsigned char *data, int size)
 	if (!data)
 		return NULL;
 
+	/* SKB header from slab, data from the private pool. */
 	skb = kmem_cache_alloc(skbuff_head_cache, GFP_ATOMIC & ~__GFP_DMA);
 	if (!skb)
 		return NULL;
@@ -67,11 +87,19 @@ static struct sk_buff *rtl8196e_build_skb(unsigned char *data, int size)
 	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
 	atomic_set(&shinfo->dataref, 1);
 
+	/* Leave headroom for driver-private data and NET_SKB_PAD. */
 	skb_reserve(skb, RTL8196E_PRIV_DATA_SIZE + NET_SKB_PAD);
 
 	return skb;
 }
 
+/**
+ * rtl8196e_pool_create() - Create a private buffer pool.
+ * @buf_size: Desired payload size.
+ * @count: Number of buffers to allocate.
+ *
+ * Return: Pool handle or NULL on failure.
+ */
 struct rtl8196e_pool *rtl8196e_pool_create(size_t buf_size, int count)
 {
 	struct rtl8196e_pool *pool;
@@ -94,6 +122,7 @@ struct rtl8196e_pool *rtl8196e_pool_create(size_t buf_size, int count)
 
 	for (i = 0; i < count; i++) {
 		struct rtl8196e_pool_buf *b;
+		/* Allocate stable DMA-safe buffer with metadata prefix. */
 		b = kmalloc(sizeof(*b) + pool->buf_size, GFP_KERNEL | GFP_DMA);
 		if (!b)
 			break;
@@ -111,6 +140,10 @@ struct rtl8196e_pool *rtl8196e_pool_create(size_t buf_size, int count)
 	return pool;
 }
 
+/**
+ * rtl8196e_pool_destroy() - Destroy a pool and free its buffers.
+ * @pool: Pool handle.
+ */
 void rtl8196e_pool_destroy(struct rtl8196e_pool *pool)
 {
 	int i;
@@ -125,6 +158,13 @@ void rtl8196e_pool_destroy(struct rtl8196e_pool *pool)
 	kfree(pool);
 }
 
+/**
+ * rtl8196e_pool_alloc() - Allocate a raw buffer from the pool.
+ * @pool: Pool handle.
+ * @skb_out: Optional pointer, always set to NULL (unused).
+ *
+ * Return: Buffer pointer or NULL if pool empty.
+ */
 void *rtl8196e_pool_alloc(struct rtl8196e_pool *pool, void **skb_out)
 {
 	unsigned long flags;
@@ -148,6 +188,11 @@ void *rtl8196e_pool_alloc(struct rtl8196e_pool *pool, void **skb_out)
 	return b->data;
 }
 
+/**
+ * rtl8196e_pool_free() - Return a raw buffer to the pool.
+ * @pool: Pool handle.
+ * @buf: Buffer pointer.
+ */
 void rtl8196e_pool_free(struct rtl8196e_pool *pool, void *buf)
 {
 	unsigned long flags;
@@ -163,6 +208,13 @@ void rtl8196e_pool_free(struct rtl8196e_pool *pool, void *buf)
 	spin_unlock_irqrestore(&pool->lock, flags);
 }
 
+/**
+ * rtl8196e_pool_alloc_skb() - Allocate an SKB backed by pool memory.
+ * @pool: Pool handle.
+ * @size: Payload size.
+ *
+ * Return: SKB pointer or NULL on failure.
+ */
 struct sk_buff *rtl8196e_pool_alloc_skb(struct rtl8196e_pool *pool, unsigned int size)
 {
 	unsigned char *buf;
@@ -181,6 +233,12 @@ struct sk_buff *rtl8196e_pool_alloc_skb(struct rtl8196e_pool *pool, unsigned int
 	return skb;
 }
 
+/**
+ * is_rtl865x_eth_priv_buf() - Identify pool-backed SKB data.
+ * @head: SKB head pointer.
+ *
+ * Return: 1 if buffer belongs to the RTL8196E pool, 0 otherwise.
+ */
 int is_rtl865x_eth_priv_buf(unsigned char *head)
 {
 	struct rtl8196e_pool_buf *b;
@@ -197,6 +255,10 @@ int is_rtl865x_eth_priv_buf(unsigned char *head)
 }
 EXPORT_SYMBOL(is_rtl865x_eth_priv_buf);
 
+/**
+ * free_rtl865x_eth_priv_buf() - Return pool-backed SKB data to pool.
+ * @head: SKB head pointer.
+ */
 void free_rtl865x_eth_priv_buf(unsigned char *head)
 {
 	struct rtl8196e_pool_buf *b;

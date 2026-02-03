@@ -1,4 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * RTL8196E descriptor and mbuf layout.
+ *
+ * These structures must match hardware expectations.
+ */
 #ifndef RTL8196E_DESC_H
 #define RTL8196E_DESC_H
 
@@ -10,6 +15,19 @@
 #define BUF_ASICHOLD 0x80
 #define BUF_DRIVERHOLD 0xc0
 
+/**
+ * struct rtl_mBuf - RTL819x mbuf structure.
+ * @m_next: Next buffer in chain.
+ * @m_pkthdr: Packet header pointer.
+ * @m_len: Length of buffer.
+ * @m_flags: Buffer flags.
+ * @m_data: Data pointer.
+ * @m_extbuf: External buffer pointer.
+ * @m_extsize: External buffer size.
+ * @m_reserved: Padding/reserved.
+ * @skb: Associated SKB pointer (driver-owned).
+ * @pending0: Hardware scratch/pending field.
+ */
 struct rtl_mBuf {
 	struct rtl_mBuf *m_next;
 	struct rtl_pktHdr *m_pkthdr;
@@ -28,6 +46,16 @@ struct rtl_mBuf {
 	u32 pending0;
 };
 
+/**
+ * struct rtl_pktHdr - RTL819x packet header structure.
+ * @PKTHDRNXT: Union for chaining or mbuf pointer.
+ * @ph_len: Packet length.
+ * @ph_flags: Packet flags.
+ * @ph_portlist: Port list for TX.
+ * @ph_vlanId: VLAN ID.
+ *
+ * This layout mirrors the hardware header format.
+ */
 struct rtl_pktHdr {
 	union {
 		struct rtl_pktHdr *pkthdr_next;

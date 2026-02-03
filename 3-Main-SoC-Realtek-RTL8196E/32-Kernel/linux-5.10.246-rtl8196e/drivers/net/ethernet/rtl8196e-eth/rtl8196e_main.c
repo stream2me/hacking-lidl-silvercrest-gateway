@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0
+/*
+ * RTL8196E minimal Ethernet driver - core net_device glue.
+ *
+ * This file wires the platform device to netdev, NAPI, IRQs, and TX/RX
+ * scheduling. Hardware register programming is isolated in rtl8196e_hw.c.
+ */
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/netdevice.h>
@@ -8,7 +14,6 @@
 #include <linux/interrupt.h>
 #include <linux/timer.h>
 #include <linux/errno.h>
-#include <linux/ethtool.h>
 #include <asm/cacheflush.h>
 #include "rtl8196e_dt.h"
 #include "rtl8196e_hw.h"
@@ -54,25 +59,24 @@ struct rtl8196e_priv {
 	struct rtl8196e_dt_iface iface;
 	struct timer_list tx_timer;
 	struct timer_list link_timer;
-	struct timer_list dbg_timer;
 	atomic_t tx_pending;
 	u16 vlan_id;
 	u16 portmask;
 	int phy_port;
 	int phy_id;
 	unsigned int link_poll_ms;
-	u32 l2_check_ok;
-	u32 l2_check_fail;
-	int l2_check_last;
 	u32 tx_debug_once;
-	u32 tx_dbg_portmask;
-	u32 tx_dbg_vid;
-	u32 tx_dbg_len;
-	u32 tx_dbg_submit;
-	u32 dbg_tx_idx;
-	u32 dbg_irqs;
 };
 
+/**
+ * rtl8196e_port_from_mask() - Return the first port index from a mask.
+ * @mask: Port bitmask.
+ *
+ * The driver uses a single physical port. This helper extracts the first
+ * set bit so the PHY/link logic can be configured deterministically.
+ *
+ * Return: Port index (0..5) or -EINVAL if no bit is set.
+ */
 static int rtl8196e_port_from_mask(u16 mask)
 {
 	int port;
@@ -85,6 +89,12 @@ static int rtl8196e_port_from_mask(u16 mask)
 	return -EINVAL;
 }
 
+/**
+ * rtl8196e_tx_timer_fn() - Periodic TX reclaim for TX-only traffic.
+ * @t: Timer handle.
+ *
+ * Frees completed TX descriptors and wakes the queue if space is available.
+ */
 static void rtl8196e_tx_timer_fn(struct timer_list *t)
 {
 	struct rtl8196e_priv *priv = from_timer(priv, t, tx_timer);
@@ -112,6 +122,12 @@ static void rtl8196e_tx_timer_fn(struct timer_list *t)
 	}
 }
 
+/**
+ * rtl8196e_link_timer_fn() - Link poll timer.
+ * @t: Timer handle.
+ *
+ * Polls PHY link status when link polling is enabled.
+ */
 static void rtl8196e_link_timer_fn(struct timer_list *t)
 {
 	struct rtl8196e_priv *priv = from_timer(priv, t, link_timer);
@@ -130,83 +146,14 @@ static void rtl8196e_link_timer_fn(struct timer_list *t)
 		mod_timer(&priv->link_timer, jiffies + msecs_to_jiffies(priv->link_poll_ms));
 }
 
-static void rtl8196e_dbg_timer_fn(struct timer_list *t)
-{
-	struct rtl8196e_priv *priv = from_timer(priv, t, dbg_timer);
-	struct rtl8196e_ring *ring = priv->ring;
-	u32 idx = priv->dbg_tx_idx;
-	u32 rx_idx;
-	u32 entry = 0;
-	u32 rx_entry = 0;
-	u32 rx_mbuf_entry = 0;
-	struct rtl_pktHdr *ph = NULL;
-	struct rtl_pktHdr *rx_ph = NULL;
-	struct rtl_mBuf *rx_mb = NULL;
-	u32 isr, imr, icr;
-
-	if (!rtl8196e_debug || !ring)
-		return;
-
-	if (idx < rtl8196e_ring_tx_count(ring))
-		entry = rtl8196e_ring_tx_entry(ring, idx);
-
-	rx_idx = rtl8196e_ring_rx_index(ring);
-	rx_entry = rtl8196e_ring_rx_pkthdr_entry(ring, rx_idx);
-	rx_mbuf_entry = rtl8196e_ring_rx_mbuf_entry(ring, rx_idx);
-
-	isr = *(volatile u32 *)CPUIISR;
-	imr = *(volatile u32 *)CPUIIMR;
-	icr = *(volatile u32 *)CPUICR;
-
-	if (entry)
-		ph = (struct rtl_pktHdr *)(entry & ~(RTL8196E_DESC_OWNED_BIT | RTL8196E_DESC_WRAP));
-	if (ph)
-		dma_cache_inv((unsigned long)ph, sizeof(*ph));
-
-	netdev_info(priv->ndev,
-		    "dbg: CPUICR=0x%08x CPUIIMR=0x%08x CPUIISR=0x%08x\n",
-		    icr, imr, isr);
-	netdev_info(priv->ndev,
-		    "dbg: CPUTPDCR0=0x%08x CPURPDCR0=0x%08x CPURMDCR0=0x%08x\n",
-		    *(volatile u32 *)CPUTPDCR0,
-		    *(volatile u32 *)CPURPDCR0,
-		    *(volatile u32 *)CPURMDCR0);
-	netdev_info(priv->ndev,
-		    "dbg: CPUQDM0=0x%08x CPUQDM2=0x%08x CPUQDM4=0x%08x\n",
-		    *(volatile u32 *)CPUQDM0,
-		    *(volatile u32 *)CPUQDM2,
-		    *(volatile u32 *)CPUQDM4);
-
-	if (ph) {
-		netdev_info(priv->ndev,
-			    "dbg: TX idx=%u entry=0x%08x own=%u len=%u flags=0x%04x port=0x%02x vid=%u\n",
-			    idx, entry, entry & RTL8196E_DESC_OWNED_BIT ? 1 : 0,
-			    ph->ph_len, ph->ph_flags, ph->ph_portlist, ph->ph_vlanId);
-	}
-
-	if (rx_entry) {
-		rx_ph = (struct rtl_pktHdr *)(rx_entry & ~(RTL8196E_DESC_OWNED_BIT | RTL8196E_DESC_WRAP));
-		if (!(rx_entry & RTL8196E_DESC_OWNED_BIT) && rx_ph)
-			dma_cache_inv((unsigned long)rx_ph, sizeof(*rx_ph));
-	}
-	if (rx_mbuf_entry) {
-		rx_mb = (struct rtl_mBuf *)(rx_mbuf_entry & ~(RTL8196E_DESC_OWNED_BIT | RTL8196E_DESC_WRAP));
-		if (!(rx_mbuf_entry & RTL8196E_DESC_OWNED_BIT) && rx_mb)
-			dma_cache_inv((unsigned long)rx_mb, sizeof(*rx_mb));
-	}
-
-	netdev_info(priv->ndev,
-		    "dbg: RX idx=%u entry=0x%08x own=%u mbuf=0x%08x own=%u\n",
-		    rx_idx,
-		    rx_entry, rx_entry & RTL8196E_DESC_OWNED_BIT ? 1 : 0,
-		    rx_mbuf_entry, rx_mbuf_entry & RTL8196E_DESC_OWNED_BIT ? 1 : 0);
-	if (rx_ph && !(rx_entry & RTL8196E_DESC_OWNED_BIT)) {
-		netdev_info(priv->ndev,
-			    "dbg: RX ph len=%u flags=0x%04x port=0x%02x vid=%u\n",
-			    rx_ph->ph_len, rx_ph->ph_flags, rx_ph->ph_portlist, rx_ph->ph_vlanId);
-	}
-}
-
+/**
+ * rtl8196e_open() - net_device open hook.
+ * @ndev: net_device instance.
+ *
+ * Programs hardware tables, initializes rings, and enables IRQs.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
 static int rtl8196e_open(struct net_device *ndev)
 {
 	struct rtl8196e_priv *priv = netdev_priv(ndev);
@@ -215,6 +162,7 @@ static int rtl8196e_open(struct net_device *ndev)
 
 	napi_enable(&priv->napi);
 
+	/* Hardware must be initialized before ring programming. */
 	rtl8196e_hw_init(&priv->hw);
 	rtl8196e_hw_set_rx_rings(&priv->hw,
 				   rtl8196e_ring_rx_pkthdr_base(priv->ring),
@@ -242,8 +190,6 @@ static int rtl8196e_open(struct net_device *ndev)
 	}
 	ret = rtl8196e_hw_l2_add_cpu_entry(&priv->hw, ndev->dev_addr, 0, 0);
 	if (ret) {
-		priv->l2_check_last = ret;
-		priv->l2_check_fail++;
 		netdev_warn(ndev, "L2 toCPU entry failed (%d), enabling trap fallback\n", ret);
 		rtl8196e_hw_l2_trap_enable(&priv->hw);
 	} else {
@@ -251,16 +197,14 @@ static int rtl8196e_open(struct net_device *ndev)
 						     priv->portmask | rtl8196e_cpu_port_mask);
 		if (ret)
 			netdev_warn(ndev, "L2 broadcast entry failed (%d)\n", ret);
-		ret = rtl8196e_hw_l2_check_cpu_entry(&priv->hw, ndev->dev_addr, 0);
-		if (ret) {
-			priv->l2_check_last = ret;
-			priv->l2_check_fail++;
-			netdev_warn(ndev, "L2 toCPU entry verify failed (%d), enabling trap fallback\n", ret);
-			rtl8196e_hw_l2_trap_enable(&priv->hw);
-		} else {
-			priv->l2_check_last = 0;
-			priv->l2_check_ok++;
-			netdev_dbg(ndev, "L2 toCPU entry verified\n");
+		if (rtl8196e_debug) {
+			ret = rtl8196e_hw_l2_check_cpu_entry(&priv->hw, ndev->dev_addr, 0);
+			if (ret) {
+				netdev_warn(ndev, "L2 toCPU entry verify failed (%d), enabling trap fallback\n", ret);
+				rtl8196e_hw_l2_trap_enable(&priv->hw);
+			} else {
+				netdev_dbg(ndev, "L2 toCPU entry verified\n");
+			}
 		}
 	}
 	rtl8196e_hw_start(&priv->hw);
@@ -278,6 +222,14 @@ static int rtl8196e_open(struct net_device *ndev)
 	return 0;
 }
 
+/**
+ * rtl8196e_stop() - net_device stop hook.
+ * @ndev: net_device instance.
+ *
+ * Disables IRQs, stops HW, and stops timers.
+ *
+ * Return: 0 on success.
+ */
 static int rtl8196e_stop(struct net_device *ndev)
 {
 	struct rtl8196e_priv *priv = netdev_priv(ndev);
@@ -288,12 +240,70 @@ static int rtl8196e_stop(struct net_device *ndev)
 	napi_disable(&priv->napi);
 	del_timer_sync(&priv->tx_timer);
 	del_timer_sync(&priv->link_timer);
-	del_timer_sync(&priv->dbg_timer);
 	netif_carrier_off(ndev);
 
 	return 0;
 }
 
+/**
+ * rtl8196e_set_mac_address() - Runtime MAC update.
+ * @ndev: net_device instance.
+ * @addr: New MAC address (sockaddr).
+ *
+ * Updates NETIF/L2 tables when the interface is running.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+static int rtl8196e_set_mac_address(struct net_device *ndev, void *addr)
+{
+	struct rtl8196e_priv *priv = netdev_priv(ndev);
+	struct sockaddr *sa = addr;
+	int ret;
+
+	if (!is_valid_ether_addr(sa->sa_data))
+		return -EADDRNOTAVAIL;
+
+	ether_addr_copy(ndev->dev_addr, sa->sa_data);
+
+	if (!netif_running(ndev))
+		return 0;
+
+	netif_tx_disable(ndev);
+	rtl8196e_hw_disable_irqs(&priv->hw);
+
+	ret = rtl8196e_hw_netif_setup(&priv->hw, ndev->dev_addr,
+				      priv->vlan_id, ndev->mtu,
+				      priv->portmask | rtl8196e_cpu_port_mask);
+	if (ret)
+		netdev_warn(ndev, "NETIF setup failed (%d)\n", ret);
+
+	ret = rtl8196e_hw_l2_add_cpu_entry(&priv->hw, ndev->dev_addr, 0, 0);
+	if (ret) {
+		netdev_warn(ndev, "L2 toCPU entry failed (%d), enabling trap fallback\n", ret);
+		rtl8196e_hw_l2_trap_enable(&priv->hw);
+	} else if (rtl8196e_debug) {
+		ret = rtl8196e_hw_l2_check_cpu_entry(&priv->hw, ndev->dev_addr, 0);
+		if (ret) {
+			netdev_warn(ndev, "L2 toCPU entry verify failed (%d), enabling trap fallback\n", ret);
+			rtl8196e_hw_l2_trap_enable(&priv->hw);
+		}
+	}
+
+	rtl8196e_hw_enable_irqs(&priv->hw);
+	netif_wake_queue(ndev);
+
+	return 0;
+}
+
+/**
+ * rtl8196e_start_xmit() - Transmit a packet.
+ * @skb: Packet buffer to transmit.
+ * @ndev: net_device instance.
+ *
+ * Linearizes non-linear SKBs, fills a TX descriptor, and kicks the switch core.
+ *
+ * Return: NETDEV_TX_OK or NETDEV_TX_BUSY.
+ */
 static netdev_tx_t rtl8196e_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
 	struct rtl8196e_priv *priv = netdev_priv(ndev);
@@ -322,15 +332,8 @@ static netdev_tx_t rtl8196e_start_xmit(struct sk_buff *skb, struct net_device *n
 	debug_val = READ_ONCE(priv->tx_debug_once);
 	if (debug_val == 0) {
 		WRITE_ONCE(priv->tx_debug_once, 1);
-		priv->tx_dbg_portmask = priv->portmask;
-		priv->tx_dbg_vid = priv->vlan_id;
-		priv->tx_dbg_len = skb->len;
-		priv->tx_dbg_submit = (ret == 0);
-		priv->dbg_tx_idx = rtl8196e_ring_last_tx_submit(priv->ring);
 		netdev_info(ndev, "xmit first packet len=%u portmask=0x%x vid=%u\n",
 			    skb->len, priv->portmask, priv->vlan_id);
-		if (rtl8196e_debug)
-			mod_timer(&priv->dbg_timer, jiffies + msecs_to_jiffies(200));
 	}
 	if (ret < 0) {
 		unsigned int pkts = 0, bytes = 0;
@@ -363,10 +366,16 @@ static netdev_tx_t rtl8196e_start_xmit(struct sk_buff *skb, struct net_device *n
 		atomic_set(&priv->tx_pending, 1);
 		mod_timer(&priv->tx_timer, jiffies + msecs_to_jiffies(RTL8196E_TX_TIMER_MS));
 	}
-
 	return NETDEV_TX_OK;
 }
 
+/**
+ * rtl8196e_tx_timeout() - TX watchdog recovery.
+ * @ndev: net_device instance.
+ * @txqueue: TX queue index.
+ *
+ * Resets the TX ring and restarts the hardware TX engine.
+ */
 static void rtl8196e_tx_timeout(struct net_device *ndev, unsigned int txqueue)
 {
 	struct rtl8196e_priv *priv = netdev_priv(ndev);
@@ -392,6 +401,15 @@ static void rtl8196e_tx_timeout(struct net_device *ndev, unsigned int txqueue)
 	netif_wake_queue(ndev);
 }
 
+/**
+ * rtl8196e_poll() - NAPI poll handler.
+ * @napi: NAPI instance.
+ * @budget: Work budget.
+ *
+ * Handles RX packets and reclaims TX descriptors.
+ *
+ * Return: Number of packets processed.
+ */
 static int rtl8196e_poll(struct napi_struct *napi, int budget)
 {
 	struct rtl8196e_priv *priv = container_of(napi, struct rtl8196e_priv, napi);
@@ -417,6 +435,15 @@ static int rtl8196e_poll(struct napi_struct *napi, int budget)
 	return work_done;
 }
 
+/**
+ * rtl8196e_isr() - Interrupt handler.
+ * @irq: IRQ number.
+ * @dev_id: net_device pointer.
+ *
+ * Acks interrupts, updates link, and schedules NAPI if needed.
+ *
+ * Return: IRQ_HANDLED.
+ */
 static irqreturn_t rtl8196e_isr(int irq, void *dev_id)
 {
 	struct net_device *ndev = dev_id;
@@ -425,10 +452,6 @@ static irqreturn_t rtl8196e_isr(int irq, void *dev_id)
 	bool link;
 
 	status = *(volatile u32 *)CPUIISR;
-	if (rtl8196e_debug && priv->dbg_irqs < 3) {
-		netdev_info(ndev, "dbg: ISR status=0x%08x\n", status);
-		priv->dbg_irqs++;
-	}
 	*(volatile u32 *)CPUIISR = status;
 	status &= *(volatile u32 *)CPUIIMR;
 
@@ -455,56 +478,17 @@ static const struct net_device_ops rtl8196e_netdev_ops = {
 	.ndo_stop = rtl8196e_stop,
 	.ndo_start_xmit = rtl8196e_start_xmit,
 	.ndo_tx_timeout = rtl8196e_tx_timeout,
+	.ndo_set_mac_address = rtl8196e_set_mac_address,
 };
 
-static int rtl8196e_get_sset_count(struct net_device *ndev, int sset)
-{
-	(void)ndev;
-	if (sset == ETH_SS_STATS)
-		return 7;
-	return -EOPNOTSUPP;
-}
-
-static void rtl8196e_get_strings(struct net_device *ndev, u32 sset, u8 *data)
-{
-	static const char stats[][ETH_GSTRING_LEN] = {
-		"rtl8196e_l2_check_ok",
-		"rtl8196e_l2_check_fail",
-		"rtl8196e_l2_check_last_result",
-		"rtl8196e_tx_dbg_portmask",
-		"rtl8196e_tx_dbg_vid",
-		"rtl8196e_tx_dbg_len",
-		"rtl8196e_tx_dbg_submit",
-	};
-
-	(void)ndev;
-	if (sset != ETH_SS_STATS)
-		return;
-
-	memcpy(data, stats, sizeof(stats));
-}
-
-static void rtl8196e_get_ethtool_stats(struct net_device *ndev,
-				       struct ethtool_stats *stats, u64 *data)
-{
-	struct rtl8196e_priv *priv = netdev_priv(ndev);
-
-	(void)stats;
-	data[0] = priv->l2_check_ok;
-	data[1] = priv->l2_check_fail;
-	data[2] = priv->l2_check_last;
-	data[3] = priv->tx_dbg_portmask;
-	data[4] = priv->tx_dbg_vid;
-	data[5] = priv->tx_dbg_len;
-	data[6] = priv->tx_dbg_submit;
-}
-
-static const struct ethtool_ops rtl8196e_ethtool_ops = {
-	.get_sset_count = rtl8196e_get_sset_count,
-	.get_strings = rtl8196e_get_strings,
-	.get_ethtool_stats = rtl8196e_get_ethtool_stats,
-};
-
+/**
+ * rtl8196e_probe() - Platform probe.
+ * @pdev: Platform device.
+ *
+ * Allocates netdev, parses DT, initializes rings/pool, and registers the device.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
 static int rtl8196e_probe(struct platform_device *pdev)
 {
 	struct net_device *ndev;
@@ -558,16 +542,15 @@ static int rtl8196e_probe(struct platform_device *pdev)
 
 	timer_setup(&priv->tx_timer, rtl8196e_tx_timer_fn, 0);
 	timer_setup(&priv->link_timer, rtl8196e_link_timer_fn, 0);
-	timer_setup(&priv->dbg_timer, rtl8196e_dbg_timer_fn, 0);
 	atomic_set(&priv->tx_pending, 0);
 
 	netif_napi_add(ndev, &priv->napi, rtl8196e_poll, 64);
 	ndev->netdev_ops = &rtl8196e_netdev_ops;
-	ndev->ethtool_ops = &rtl8196e_ethtool_ops;
 	ndev->watchdog_timeo = 10 * HZ;
 	ndev->min_mtu = 68;
 	ndev->max_mtu = priv->iface.mtu;
 	ndev->mtu = priv->iface.mtu;
+	ndev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
@@ -597,6 +580,14 @@ err_free:
 	return ret;
 }
 
+/**
+ * rtl8196e_remove() - Platform remove.
+ * @pdev: Platform device.
+ *
+ * Unregisters netdev and frees resources.
+ *
+ * Return: 0 on success.
+ */
 static int rtl8196e_remove(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);

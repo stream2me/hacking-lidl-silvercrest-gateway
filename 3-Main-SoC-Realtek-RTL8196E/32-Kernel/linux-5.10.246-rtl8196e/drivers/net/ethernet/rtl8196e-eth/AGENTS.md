@@ -35,5 +35,5 @@ Single physical port, zero-copy RX/TX, DT compatible with existing `ethernet` no
 
 ## Tests to run (when possible)
 - `iperf3` TX/RX (target > 80 Mbps, low TX/RX gap).
-- `ethtool -S` (pool/ring stats).
+- `ip -s link` (basic stats).
 - `ping` IPv4/IPv6 + SSH stability.

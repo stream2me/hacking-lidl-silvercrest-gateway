@@ -2,6 +2,12 @@
 #ifndef RTL8196E_HW_H
 #define RTL8196E_HW_H
 
+/*
+ * RTL8196E minimal Ethernet driver - hardware interface.
+ *
+ * This header declares the low-level hardware hooks used by rtl8196e_main.c.
+ */
+
 #include <linux/types.h>
 #include <linux/io.h>
 #include "rtl8196e_regs.h"
