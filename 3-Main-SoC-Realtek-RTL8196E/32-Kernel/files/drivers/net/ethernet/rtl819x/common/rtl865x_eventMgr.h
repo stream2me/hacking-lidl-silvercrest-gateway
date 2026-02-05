@@ -12,7 +12,7 @@
 #ifndef RTL865X_EVENT_MANAGEMENT_H
 #define RTL865X_EVENT_MANAGEMENT_H
 
-#include "rtl_queue.h"  /* BSD-style queue macros, copied to include/ */
+#include "rtl819x.h"
 
 #define CONFIG_RTL865X_EVENT_PROC_DEBUG
 #define DEFAULT_EVENT_LIST_CNT 	4

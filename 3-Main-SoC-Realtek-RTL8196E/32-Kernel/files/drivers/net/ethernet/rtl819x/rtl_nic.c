@@ -29,8 +29,8 @@
  * ============================================================================
  */
 
-#define DRV_VERSION     "2.0.0"
-#define DRV_RELDATE     "Dec 11, 2025"
+#define DRV_VERSION     "2.1.0"
+#define DRV_RELDATE     "Feb 05, 2026"
 #define DRV_NAME        "rtl819x"
 #define DRV_DESCRIPTION "RTL8196E Ethernet Driver (L2)"
 #define DRV_AUTHOR      "Jacques Nilo"
@@ -47,24 +47,249 @@
 #include <linux/platform_device.h>  /* DT integration: platform_driver support */
 #include <linux/of.h>               /* DT integration: device tree parsing */
 #include <linux/of_platform.h>      /* DT integration: of_match_table */
-#include "bspchip.h"  /* Copied from 2.6.30 include/bsp/ to driver include/ */
-
-#include "rtl_types.h"
-#include "rtl_glue.h"
-
-#include "asicRegs.h"
+#include "rtl819x.h"
 #include "AsicDriver/rtl865x_asicCom.h"
 #include "AsicDriver/rtl865x_asicL2.h"
-
-#include "mbuf.h"
-#include "rtl_errno.h"
 #include "rtl865xc_swNic.h"
-
-#include "rtl865x_fdb_api.h"
-#include "rtl865x_netif.h"  /* For netif management functions */
 #include "common/rtl865x_vlan.h"  /* For VLAN functions */
 #include "common/rtl865x_eventMgr.h"  /* For event manager */
-#include "rtl_nic.h"
+
+/* RTL865xC ASIC regs: local-only defines (trimmed from rtl865xc_asicregs.h) */
+#define MAX_PORT_NUMBER 6
+
+#define RTL_R32(addr) (*(volatile unsigned long *)(addr))
+
+#define MIB_ADDROFFSETBYPORT 0x80 /* Address offset of the same counters of each port. Ex: P0's ifInOctets counter and P1's ifInOctets counter. */
+
+#define OFFSET_IFINOCTETS_P0 0x100
+
+#define OFFSET_IFINUCASTPKTS_P0 0x108
+
+#define OFFSET_ETHERSTATSJABBERS_P0 0x138
+
+#define OFFSET_ETHERSTATSMULTICASTPKTS_P0 0x13C
+
+#define OFFSET_ETHERSTATSBROADCASTPKTS_P0 0x140
+
+#define OFFSET_DOT1DTPPORTINDISCARDS_P0 0x144
+
+#define OFFSET_DOT3STATSFCSERRORS_P0 0x14C
+
+#define OFFSET_IFOUTOCTETS_P0 0x800
+
+#define OFFSET_IFOUTUCASTPKTS_P0 0x808
+
+#define OFFSET_IFOUTMULTICASTPKTS_P0 0x80C
+
+#define OFFSET_IFOUTBROADCASTPKTS_P0 0x810
+
+#define OFFSET_IFOUTDISCARDS 0x814
+
+#define OFFSET_DOT3STATSDEFERREDTRANSMISSIONS_P0 0x820
+
+#define OFFSET_ETHERSTATSCOLLISIONS_P0 0x834
+
+#define CPUQDM0 (0x030 + CPU_IFACE_BASE)	   /* Queue ID 0 and Descriptor Ring Mapping Register */
+
+#define CPUQDM2 (0x034 + CPU_IFACE_BASE)	   /* Queue ID 2 and Descriptor Ring Mapping Register */
+
+#define CPUQDM4 (0x038 + CPU_IFACE_BASE)	   /* Queue ID 4 and Descriptor Ring Mapping Register */
+
+#define LINK_CHANGE_IP (1 << 31) /* Link change interrupt pending */
+
+#define RX_DONE_IP_ALL (0x3f << 3)		   /* Rx one packet done anyone interrupt pending */
+
+#define TX_ALL_DONE_IP_ALL (0x03 << 1)		   /* Tx all packets done any interrupt pending */
+
+#define SWCORECNR (SWCORE_BASE + 0x00006000)
+
+#define VLANTCR (0x008 + SWCORECNR) /* Vlan tag control */
+
+#define NwayAbility1000MF (1 << 22) /* Auto-Negotiation advertise ability: 1000Mbps Full-duplex*/
+
+#define NwayAbility100MF (1 << 21)	/* Auto-Negotiation advertise ability: 100Mbps Full-duplex */
+
+#define NwayAbility100MH (1 << 20)	/* Auto-Negotiation advertise ability: 100Mbps Half-duplex */
+
+#define PortStatusNWayEnable (1 << 7)	  /* N-Way Enable */
+
+#define PortStatusDuplex (1 << 3)		  /* Duplex */
+
+#define PortStatusLinkSpeed_MASK (3 << 0) /* Link Speed */
+
+#define PortStatusLinkSpeed_OFFSET 0
+
+#define PortStatusLinkSpeed10M (0 << 0)		 /* 10M */
+
+#define PortStatusLinkSpeed100M (1 << 0)	 /* 100M */
+
+#define PortStatusLinkSpeed1000M (2 << 0)	 /* 1000M */
+
+#define SYS_SW_CLK_ENABLE 0x200
+
+#define BOND_8196EU1 (0x0)
+
+#define BOND_8196EU3 (0x4)
+
+#define BOND_8196EU2 (0x8)
+
+#define BOND_8196EU (0xC)
+
+
+/* Local driver definitions (formerly in include/rtl_nic.h) */
+#define MAX_ETH_SKB_NUM ( \
+	NUM_RX_PKTHDR_DESC + NUM_RX_PKTHDR_DESC1 + NUM_RX_PKTHDR_DESC2 + NUM_RX_PKTHDR_DESC3 + NUM_RX_PKTHDR_DESC4 + NUM_RX_PKTHDR_DESC5 + MAX_PRE_ALLOC_RX_SKB + 690)
+/* Kernel 5.4: NET_SKB_PAD uses max() which is braced-group, can't use in array declaration
+ * On MIPS, L1_CACHE_BYTES=32, so NET_SKB_PAD=32. Use constant instead. */
+#define ETH_SKB_BUF_SIZE 2048
+#define ETH_MAGIC_CODE "819X"
+#define ETH_MAGIC_LEN 4
+
+struct re865x_priv
+{
+	u16 ready;
+	u16 addIF;
+	u16 devnum;
+	u32 sec_count;
+	u32 sec;
+	struct net_device *dev[ETH_INTF_NUM];
+	void *regs;
+	struct tasklet_struct rx_tasklet;
+	struct timer_list timer; /* Media monitoring timer. */
+	unsigned long linkchg;
+};
+
+struct dev_priv
+{
+	u32 id;		  /* VLAN id, not vlan index */
+	u32 portmask; /* member port mask */
+	u32 portnum;  /* number of member ports */
+	u32 netinit;
+	struct net_device *dev;
+	struct net_device *dev_prev;
+	struct net_device *dev_next;
+
+	/* Phase 2: NAPI migration (v3.5.0) */
+	struct napi_struct napi;		/* Combined RX+TX NAPI polling */
+	struct tasklet_struct link_dsr_tasklet;	/* Link changes (not NAPI) */
+
+	spinlock_t lock;
+	u32 msg_enable;
+	u32 opened;
+	u32 irq_owner; // record which dev request IRQ
+	struct net_device_stats net_stats;
+	struct timer_list expire_timer;
+
+	/* Phase 2: Descriptor error statistics */
+	unsigned long rx_desc_null_errors;      /* NULL descriptor pointers in RX */
+	unsigned long rx_mbuf_null_errors;      /* NULL mbuf pointers in RX */
+	unsigned long rx_skb_null_errors;       /* NULL skb pointers in RX */
+	unsigned long rx_desc_index_errors;     /* RX descriptor index out of bounds */
+	unsigned long rx_mbuf_index_errors;     /* RX mbuf index out of bounds */
+	unsigned long rx_length_errors;         /* Invalid packet length */
+	unsigned long tx_desc_null_errors;      /* NULL descriptor pointers in TX */
+	unsigned long tx_mbuf_null_errors;      /* NULL mbuf pointers in TX */
+	unsigned long tx_desc_index_errors;     /* TX descriptor index out of bounds */
+	unsigned long tx_ring_full_errors;      /* TX ring full events */
+	unsigned long ring_recovery_count;      /* Number of ring recoveries */
+	unsigned long last_recovery_jiffies;    /* Last recovery timestamp */
+
+	/* Phase 6: Buffer pool monitoring (freeze debugging) */
+	unsigned long rx_refill_failures;       /* refill_rx_skb() allocation failures */
+	unsigned long rx_pool_empty_events;     /* Times eth_skb_free_num == 0 */
+	int last_eth_skb_free_num;             /* Snapshot of buffer pool size */
+};
+
+typedef struct __rtlInterruptRxData
+{
+} rtlInterruptRxData;
+
+#define RTL_RX_PROCESS_RETURN_SUCCESS 0
+#define RTL_RX_PROCESS_RETURN_CONTINUE -1
+#define RTL_RX_PROCESS_RETURN_BREAK -2
+
+#define RTL819X_IOCTL_READ_PORT_STATUS (SIOCDEVPRIVATE + 0x01)
+#define RTL819X_IOCTL_READ_PORT_STATS (SIOCDEVPRIVATE + 0x02)
+
+struct lan_port_status
+{
+	unsigned char link;
+	unsigned char speed;
+	unsigned char duplex;
+	unsigned char nway;
+};
+
+struct port_statistics
+{
+	unsigned int rx_bytes;
+	unsigned int rx_unipkts;
+	unsigned int rx_mulpkts;
+	unsigned int rx_bropkts;
+	unsigned int rx_discard;
+	unsigned int rx_error;
+	unsigned int tx_bytes;
+	unsigned int tx_unipkts;
+	unsigned int tx_mulpkts;
+	unsigned int tx_bropkts;
+	unsigned int tx_discard;
+	unsigned int tx_error;
+};
+
+#define RTL_PS_BR0_DEV_NAME RTL_BR_NAME
+#define RTL_PS_ETH_NAME "eth"
+#define RTL_PS_WLAN_NAME RTL_WLAN_NAME
+#define RTL_PS_PPP_NAME "ppp"
+#define RTL_PS_LAN_P0_DEV_NAME RTL_DEV_NAME_NUM(RTL_PS_ETH_NAME, 0)
+#define RTL_PS_WAN0_DEV_NAME RTL_DEV_NAME_NUM(RTL_PS_ETH_NAME, 1)
+#define RTL_PS_PPP0_DEV_NAME RTL_DEV_NAME_NUM(RTL_PS_PPP_NAME, 0)
+#define RTL_PS_PPP1_DEV_NAME RTL_DEV_NAME_NUM(RTL_PS_PPP_NAME, 1)
+#define RTL_PS_WLAN0_DEV_NAME RTL_DEV_NAME_NUM(RTL_PS_WLAN_NAME, 0)
+#define RTL_PS_WLAN1_DEV_NAME RTL_DEV_NAME_NUM(RTL_PS_WLAN_NAME, 1)
+#define QOS_LAN_DEV_NAME RTL_PS_BR0_DEV_NAME
+
+struct rtl865x_vlanConfig
+{
+	uint8 ifname[IFNAMSIZ];
+	uint8 isWan;
+	uint16 if_type;
+	uint16 vid;
+	uint16 fid;
+	uint32 memPort;
+	uint32 untagSet;
+	uint32 mtu;
+	ether_addr_t mac;
+	uint8 is_slave;
+};
+#define RTL865X_CONFIG_END {"", 0, 0, 0, 0, 0, 0, 0, {{0}}, 0}
+
+#define CONFIG_CHECK(expr)                                                        \
+	do                                                                            \
+	{                                                                             \
+		if (((int32)expr) != SUCCESS)                                             \
+		{                                                                         \
+			rtlglue_printf("Error >>> %s:%d failed !\n", __FUNCTION__, __LINE__); \
+			return FAILED;                                                        \
+		}                                                                         \
+	} while (0)
+
+#define INIT_CHECK(expr)                                                          \
+	do                                                                            \
+	{                                                                             \
+		if (((int32)expr) != SUCCESS)                                             \
+		{                                                                         \
+			rtlglue_printf("Error >>> %s:%d failed !\n", __FUNCTION__, __LINE__); \
+			return FAILED;                                                        \
+		}                                                                         \
+	} while (0)
+
+typedef struct _ps_drv_netif_mapping_s
+{
+	uint32 valid : 1,			  // entry enable?
+		flags;					  // reserverd
+	struct net_device *ps_netif;  // linux ps network interface
+	char drvName[MAX_IFNAMESIZE]; // netif name in driver
+
+} ps_drv_netif_mapping_t;
 
 /* Phase 2: External error statistics accessor from swNic.c */
 extern void rtl_swnic_get_error_stats(unsigned long *stats);

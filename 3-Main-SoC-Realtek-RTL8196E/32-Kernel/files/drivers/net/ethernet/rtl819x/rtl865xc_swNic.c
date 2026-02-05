@@ -31,14 +31,40 @@
 #include <linux/prefetch.h>
 #include <linux/compiler.h>
 #include <asm/io.h>          /* for dma_cache_wback_inv(), dma_cache_inv() - Kernel 5.4: moved from cacheflush.h */
-#include "rtl_types.h"
-#include "rtl_glue.h"
-#include "rtl_errno.h"
-#include "asicRegs.h"
+#include "rtl819x.h"
 #include "rtl865xc_swNic.h"
-#include "mbuf.h"
 #include "AsicDriver/rtl865x_asicCom.h"
 #include "AsicDriver/rtl865x_asicL2.h"
+
+/* RTL865xC ASIC regs: local-only defines (trimmed from rtl865xc_asicregs.h) */
+#define CPURPDCR1 (0x008 + CPU_IFACE_BASE)	   /* Rx pkthdr descriptor control 1 */
+
+#define CPURPDCR2 (0x00c + CPU_IFACE_BASE)	   /* Rx pkthdr descriptor control 2 */
+
+#define CPURPDCR3 (0x010 + CPU_IFACE_BASE)	   /* Rx pkthdr descriptor control 3 */
+
+#define CPURPDCR4 (0x014 + CPU_IFACE_BASE)	   /* Rx pkthdr descriptor control 4 */
+
+#define CPURPDCR5 (0x018 + CPU_IFACE_BASE)	   /* Rx pkthdr descriptor control 5 */
+
+#define CPURMDCR0 (0x01c + CPU_IFACE_BASE)	   /* Rx mbuf descriptor control */
+
+#define CPUTPDCR1 (0x024 + CPU_IFACE_BASE)	   /* Tx pkthdr descriptor control High */
+
+#define CPUTPDCR2 (0x060 + CPU_IFACE_BASE)	   /* Tx Pkthdr Descriptor 2 Control Register */
+
+#define CPUTPDCR3 (0x064 + CPU_IFACE_BASE)	   /* Tx Pkthdr Descriptor 3 Control Register */
+
+#define TXFD (1 << 23)		  /* Notify Tx descriptor fetch */
+
+#define DESC_OWNED_BIT (1 << 0)
+
+#define DESC_RISC_OWNED (0 << 0)
+
+#define DESC_SWCORE_OWNED (1 << 0)
+
+#define DESC_WRAP (1 << 1)
+
 
 /* Phase 2: Rate-limited logging */
 static DEFINE_RATELIMIT_STATE(rtl_swnic_err_limit, 5*HZ, 10);

@@ -10,12 +10,90 @@
  */
 
 #include <linux/delay.h>
-#include "rtl_types.h"
-#include "rtl_glue.h"
-#include "rtl865x_hwPatch.h"
-#include "asicRegs.h"
-#include "rtl865x_asicBasic.h"
+#include "rtl819x.h"
 #include "rtl865x_asicCom.h"
+
+/* RTL865xC ASIC regs: local-only defines (trimmed from rtl865xc_asicregs.h) */
+#define MIB_COUNTER_BASE (SWCORE_BASE + 0x00001000)
+
+#define MIB_CONTROL (0x00 + MIB_COUNTER_BASE) /*MIB control Register */
+
+#define ALL_COUNTER_RESTART_MASK 0x0007ffff /* SYS_COUNTER_RESTART | IN_COUNTER_RESTART_P8 | ... | OUT_COUNTER_RESTART_P0 */
+
+#define CRMR (0x08 + SWMISC_BASE)		/* Chip Revision Management Register */
+
+#define SwitchFullRst (1 << 2) /* Reset all tables & queues */
+
+#define FULL_RST SwitchFullRst /* Alias Name */
+
+#define TEACR (0x00 + ALE_BASE)		 /* Table Entry Aging Control Register */
+
+#define ALECR (0x0C + ALE_BASE)		 /* ALE Control Register */
+
+#define PLITIMR (0x20 + ALE_BASE)	 /* Port to LAN Interface Table Index Mapping Register */
+
+#define DACLRCR (0x24 + ALE_BASE)	 /* default ACL rule control register */
+
+#define Fragment2CPU (1 << 15) /*	When ACL is enabled, enable all fragmented IP packet to be trapped to CPU (because L4 is needed)            \
+								   When ACL is disabled, if this bit is set, L2 forwarding as before, L3 above operation will trapped to CPU. \
+								   When ACL is disabled, if this bit is not set, IP fragment packet will be forwarded as normal via L3 routing or NAT. */
+
+#define FRAG2CPU Fragment2CPU
+
+#define Ingress_ACL (1 << 4)  /* Enable Ingress ACL. 0: disable, 1: enable */
+
+#define Egress_ACL (1 << 3)	  /* Enable Egress ACL. 0: disable, 1: enable */
+
+#define Mode_enL2 (1 << 0)	  /* Enable L2 */
+
+#define Mode_enL3 (1 << 1)	  /* Enable L3 */
+
+#define Mode_enL4 (1 << 2)	  /* Enable L4 */
+
+#define EN_IN_ACL Ingress_ACL /* Alias Name */
+
+#define EN_OUT_ACL Egress_ACL /* Alias Name */
+
+#define EN_L4 Mode_enL4		  /* Alias Name */
+
+#define EN_L3 Mode_enL3		  /* Alias Name */
+
+#define EN_L2 Mode_enL2		  /* Alias Name */
+
+#define LIMDBC_PORT (1 << 16)							 /* By Port base */
+
+#define LIMDBC_MAC (2 << 16)							 /* By MAC base */
+
+#define IBCR1 (0x08 + OQNCR_BASE)		  /* Ingress Bandwidth Control Register 1 */
+
+#define IBCR2 (0x0C + OQNCR_BASE)		  /* Ingress Bandwidth Control Register 2 */
+
+#define PVCR0 (0x08 + 0x4A00 + SWCORE_BASE)	  /* port base control register*/
+
+#define MISC_BASE (SWCORE_BASE + 0x00007000)
+
+#define FCREN (0x014 + MISC_BASE)							   /* Flow control enable control */
+
+#define PCI_CTRL_BASE (SYSTEM_BASE + 0x3400) /* 0xB8003400 */
+
+#define MCR_BASE (SYSTEM_BASE + 0x1000) /* 0xB8001000 */
+
+#define MCR (0x000 + MCR_BASE)			/* Memory configuration register */
+
+#define DCR (0x004 + MCR_BASE) /*	DRAM control register */
+
+#define COLCNT_MASK (0x1c00000)
+
+#define COLCNT_OFFSET 22
+
+#define ROWCNT_MASK (0x6000000)
+
+#define ROWCNT_OFFSET 25
+
+#define CM_ACTIVE_SWCORE (1 << 11)
+
+#define CM_PROTECT (1 << 27)
+
 
 #define tick_Delay10ms(x)  \
 	{                      \

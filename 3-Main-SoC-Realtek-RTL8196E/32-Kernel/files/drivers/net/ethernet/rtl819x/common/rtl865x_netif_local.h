@@ -12,6 +12,8 @@
 #ifndef RTL865X_NETIF_LOCAL_H
 #define RTL865X_NETIF_LOCAL_H
 
+#include "rtl819x.h"
+
 #define REDUCE_MEMORY_SIZE_FOR_16M
 
 #define RTL865X_ACL_CHAIN_NUMBER	16

@@ -10,6 +10,8 @@
 
 #ifndef RTL8651_FDB_H
 #define RTL8651_FDB_H
+
+#include "rtl819x.h"
 #define RTL8651_MAC_NUMBER						6
 #define RTL8651_PORT_NUMBER						RTL8651_MAC_NUMBER
 #define RTL8651_MII_PORTNUMBER                 			5

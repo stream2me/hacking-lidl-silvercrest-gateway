@@ -12,7 +12,7 @@
 #ifndef	RTL865X_VLAN_H
 #define	RTL865X_VLAN_H
 
-//#include "rtl_types.h"
+#include "rtl819x.h"
 
 #define REDUCE_MEMORY_SIZE_FOR_16M
 

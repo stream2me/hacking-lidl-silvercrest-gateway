@@ -8,16 +8,11 @@
  * SPDX-License-Identifier: GPL-2.0
  */
 
-#include "../include/rtl_types.h"
-#include "../include/rtl_glue.h"
-#include "../include/rtl865x_fdb_api.h"
-#include "../include/asicRegs.h"
+#include "rtl819x.h"
 #include "../AsicDriver/rtl865x_asicCom.h"
 #include "../AsicDriver/rtl865x_asicL2.h"
-#include "../include/rtl865x_netif.h"
 #include "../common/rtl865x_eventMgr.h"
 #include "rtl865x_fdb.h"
-#include "../include/rtl_errno.h"
 
 struct rtl865x_L2Tables sw_FDB_Table;
 int32    arpAgingTime = 450;
@@ -803,5 +798,4 @@ int32 rtl865x_LinkChange_Process(void)
 	return SUCCESS;
 
 }
-
 

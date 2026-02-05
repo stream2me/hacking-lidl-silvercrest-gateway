@@ -23,14 +23,10 @@
 
         @index | RTL_LAYEREDDRV_API
 */
-#include "rtl_types.h"
-#include "rtl_glue.h"
-#include "rtl_errno.h"
-#include "rtl865x_netif.h"
+#include "rtl819x.h"
 #include "rtl865x_netif_local.h"
 #include "rtl865x_vlan.h" /*reference vlan*/
 #include "rtl865x_eventMgr.h" /*call back function....*/
-#include "rtl865x_asicBasic.h"
 #include "../AsicDriver/rtl865x_asicCom.h"
 #include "../AsicDriver/rtl865x_asicL2.h"
 
@@ -2204,4 +2200,3 @@ int32 rtl865x_reConfigDefaultAcl(char *ifName)
 
 		return SUCCESS;
 }
-

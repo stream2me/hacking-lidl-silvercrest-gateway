@@ -8,15 +8,318 @@
  *
  * SPDX-License-Identifier: GPL-2.0
  */
-#include "rtl_types.h"
-#include "rtl_glue.h"
-#include "rtl865x_asicBasic.h"
+#include "rtl819x.h"
 #include "rtl865x_asicCom.h"
 #include "rtl865x_asicL2.h"
-#include "asicRegs.h"
-#include "rtl865x_hwPatch.h"
 
 #include <linux/delay.h>
+
+/* RTL865xC ASIC regs: local-only defines (trimmed from rtl865xc_asicregs.h) */
+#define REVR (SYSTEM_BASE + 0x00000000)
+
+#define POWER_DOWN (1 << 11)
+
+#define RESTART_AUTONEGO (1 << 9)
+
+#define CAPABLE_PAUSE (1 << 10)
+
+#define LINK_RGMII 0				   /* RGMII mode */
+
+#define LINK_MII_MAC 1				   /* GMII/MII MAC auto mode */
+
+#define LINK_MII_PHY 2				   /* GMII/MII PHY auto mode */
+
+#define LINKMODE_OFFSET 23			   /* Link type offset */
+
+#define P5_LINK_RGMII LINK_RGMII	   /* Port 5 RGMII mode */
+
+#define P5_LINK_MII_MAC LINK_MII_MAC   /* Port 5 GMII/MII MAC auto mode */
+
+#define P5_LINK_MII_PHY LINK_MII_PHY   /* Port 5 GMII/MII PHY auto mode */
+
+#define P5_LINK_OFFSET LINKMODE_OFFSET /* Port 5 link type offset */
+
+#define MDCIOCR (0x004 + SWMACCR_BASE) /* MDC/MDIO Command */
+
+#define MDCIOSR (0x008 + SWMACCR_BASE) /* MDC/MDIO Status */
+
+#define PPMAR (0x010 + SWMACCR_BASE)   /* Per port matching action */
+
+#define PATP0 (0x014 + SWMACCR_BASE)   /* Pattern for port 0 */
+
+#define MASKP0 (0x02C + SWMACCR_BASE)  /* Mask for port 0 */
+
+#define CSCR (0x048 + SWMACCR_BASE)	   /* Checksum Control Register */
+
+#define SELIPG_MASK (0x3 << 18) /* Define min. IPG between backpressure data */
+
+#define SELIPG_11 (2 << 18)		/* 11, unit: byte-time */
+
+#define CF_FCDSC_OFFSET (4)		  /* Flow control DSC tolerance, default: 24 pages ( also minimum value ) */
+
+#define CF_FCDSC_MASK (0x7f << 4) /* Flow control DSC tolerance, default: 24 pages ( also minimum value ) */
+
+#define CF_RXIPG_MASK (0xf << 0)  /* Min. IPG limitation for RX receiving packetMinimum value is 6. Maximum value is 12. */
+
+#define COMMAND_READ (0 << 31)	  /* 0:Read Access, 1:Write Access */
+
+#define COMMAND_WRITE (1 << 31)	  /* 0:Read Access, 1:Write Access */
+
+#define PHYADD_OFFSET (24)		  /* PHY Address, said, PHY ID */
+
+#define REGADD_OFFSET (16)		  /* PHY Register */
+
+#define MDC_STATUS (1 << 31) /* 0: Process Done, 1: In progress */
+
+#define PITCR (0x000 + PCRAM_BASE)	  /* Port Interface Type Control Register */
+
+#define P0GMIICR (0x04C + PCRAM_BASE) /* Port-0 GMII Configuration Register */
+
+#define P5GMIICR (0x050 + PCRAM_BASE) /* Port-5 GMII Configuration Register */
+
+#define Port4_TypeCfg_SerDes (1 << 8)
+
+#define Port3_TypeCfg_SerDes (1 << 6)
+
+#define Port2_TypeCfg_SerDes (1 << 4)
+
+#define Port1_TypeCfg_SerDes (1 << 2)
+
+#define ExtPHYID_OFFSET (26)	   /* External PHY ID */
+
+#define ForceSpeed100M (1 << 19)  /* Force speed 100M */
+
+#define ForceSpeed1000M (2 << 19) /* Force speed 1G */
+
+#define ForceDuplex (1 << 18)	  /* Force Duplex */
+
+#define AutoNegoSts_MASK (0x1f << 18)
+
+#define PauseFlowControl_MASK (3 << 16)	 /* Mask for per-port 802.3 PAUSE flow control ability control */
+
+#define PauseFlowControlEtxDrx (1 << 16) /* force: enable TX, disable RX */
+
+#define PauseFlowControlDtxErx (2 << 16) /* force: disable TX, enable RX */
+
+#define MIIcfg_RXER (1 << 13)	 /* MII interface Parameter setup */
+
+#define STP_PortST_MASK (3 << 4)	   /* Mask Spanning Tree Protocol Port State Control */
+
+#define STP_PortST_DISABLE (0 << 4)	   /* Disable State */
+
+#define STP_PortST_BLOCKING (1 << 4)   /* Blocking State */
+
+#define STP_PortST_LEARNING (2 << 4)   /* Learning State */
+
+#define STP_PortST_FORWARDING (3 << 4) /* Forwarding State */
+
+#define MacSwReset (1 << 3)			   /* 0: reset state, 1: normal state */
+
+#define Conf_done (1 << 6) /*Port5 configuration is done to enable the frame reception and transmission.	*/
+
+#define CFG_GMAC_MASK (3 << 23)			/* The register default reflect the HW power on strapping value of H/W pin. */
+
+#define RGMII_RCOMP_MASK (3 << 0)	 /* RGMII Input Timing compensation control */
+
+#define RGMII_RCOMP_0NS (0 << 0)	 /* Rcomp 0.0 ns */
+
+#define RGMII_RCOMP_2DOT5NS (3 << 0) /* Rcomp 3.0 ns */
+
+#define RGMII_TCOMP_MASK (7 << 2)	 /* RGMII Output Timing compensation control */
+
+#define RGMII_TCOMP_0NS (0 << 2)	 /* Tcomp 0.0 ns */
+
+#define RGMII_TCOMP_7NS (7 << 2)	 /* Tcomp 7.0 ns */
+
+#define EEECR (0x60 + PCRAM_BASE) /* EEE ability Control Register ( 0xBB80_4160 ) */
+
+#define RMACR (0x08 + ALE_BASE)		 /* Reserved Multicast Address Address Mapping */
+
+#define FFCR (0x28 + ALE_BASE)		 /*Frame Forwarding Configuratoin Register */
+
+#define MADDR00 (1 << 0)	/* BPDU (Bridge Group Address) */
+
+#define Enable_ST (1 << 5)	  /* Enable Spanning Tree Protocol. 0: disable, 1: enable */
+
+#define EN_STP Enable_ST	  /* Alias Name */
+
+#define NAPTF2CPU (1 << 14)								 /*	Trap packets not in TCP/UDP/ICMP format and \
+										   destined to the interface required to do NAPT */
+
+#define MultiPortModeP_OFFSET (5)						 /* Multicast Port Mode : Internal (0) or External (1) */
+
+#define MultiPortModeP_MASK (0x1ff)						 /* {Ext3~Ext1,Port0~Port5} 0:Internal, 1:External */
+
+#define MCAST_PORT_EXT_MODE_OFFSET MultiPortModeP_OFFSET /* Alias Name */
+
+#define MCAST_PORT_EXT_MODE_MASK MultiPortModeP_MASK	 /* Alias Name */
+
+#define WANRouteMode_MASK (3 << 3)
+
+#define WAN_ROUTE_MASK WANRouteMode_MASK
+
+#define ENFRAGTOACLPT (1 << 11)			   /* Enable fragment packet checked by ACL and protocol trapper */
+
+#define EnNATT2LOG (1 << 10)			   /* Enable trapping attack packets for logging */
+
+#define IPMltCstCtrl_Enable (1 << 3)	/* Enable IP Multicast table lookup */
+
+#define EN_MCAST IPMltCstCtrl_Enable	/* Alias Name for Enable Multicast Table */
+
+#define EnUnkUC2CPU (1 << 1)			/* Enable Unknown Unicast Packet Trap to CPU port */
+
+#define EnUnkMC2CPU (1 << 0)			/* Enable Unknown Multicast Packet Trap to CPU port */
+
+#define EN_UNUNICAST_TOCPU EnUnkUC2CPU	/* Alias Name */
+
+#define EN_UNMCAST_TOCPU EnUnkMC2CPU	/* Alias Name */
+
+#define SBFCTR (0x4500 + SWCORE_BASE) /* System Based Flow Control Threshold Register */
+
+#define IQFCTCR (0x0E0 + SBFCTR) /* Input Queue Flow Control Threshold Configuration Register */
+
+#define IQ_DSC_FCON_OFFSET (8)		  /* Offset for input Queue Flow control turn OFF descriptor threshold */
+
+#define IQ_DSC_FCON_MASK (0xff << 8)  /* Mask for input Queue Flow control turn OFF descriptor threshold */
+
+#define IQ_DSC_FCOFF_OFFSET (0)		  /* Offset for input Queue Flow control turn ON descriptor threshold */
+
+#define IQ_DSC_FCOFF_MASK (0xff << 0) /* Mask for input Queue Flow control turn ON descriptor threshold */
+
+#define QOSFCR (0x00 + OQNCR_BASE)		  /* QoS Function Control Register */
+
+#define PBPCR (0x14 + OQNCR_BASE)		  /* Port Based Priority Control Register Address Mapping */
+
+#define DSCPCR0 (0x34 + OQNCR_BASE)		  /*DSCP Priority Control Register Address Mapping. */
+
+#define DSCPCR1 (0x38 + OQNCR_BASE)		  /*DSCP Priority Control Register Address Mapping. */
+
+#define DSCPCR2 (0x3C + OQNCR_BASE)		  /*DSCP Priority Control Register Address Mapping. */
+
+#define DSCPCR3 (0x40 + OQNCR_BASE)		  /*DSCP Priority Control Register Address Mapping. */
+
+#define DSCPCR4 (0x44 + OQNCR_BASE)		  /*DSCP Priority Control Register Address Mapping. */
+
+#define DSCPCR5 (0x48 + OQNCR_BASE)		  /*DSCP Priority Control Register Address Mapping. */
+
+#define DSCPCR6 (0x4C + OQNCR_BASE)		  /*DSCP Priority Control Register Address Mapping. */
+
+#define QIDDPCR (0x50 + OQNCR_BASE)		  /*Queue ID Decision Priority Register Address Mapping*/
+
+#define BC_withPIFG_MASK (1 << 0) /* Bandwidth Conrol Include/Exclude Preamble&IFG. 0:exclude; 1:include */
+
+#define IBWC_ODDPORT_OFFSET (16)		 /* ODD-port Ingress Bandwidth Control Offset */
+
+#define IBWC_ODDPORT_MASK (0xFFFF << 16) /* ODD-port Ingress Bandwidth Control MASK */
+
+#define IBWC_EVENPORT_OFFSET (0)		 /* EVEN-port Ingress Bandwidth Control Offset */
+
+#define IBWC_EVENPORT_MASK (0xFFFF << 0) /* EVEN-port Ingress Bandwidth Control MASK */
+
+#define PBP_PRI_OFFSET 0			/*Output queue decision priority assign for Port Based Priority*/
+
+#define BP8021Q_PRI_OFFSET 4		/*Output queue decision priority assign for 1Q Based Priority*/
+
+#define DSCP_PRI_OFFSET 8			/*Output queue decision priority assign for DSCP Based Priority*/
+
+#define ACL_PRI_OFFSET 12			/*Output queue decision priority assign for ACL Based Priority*/
+
+#define NAPT_PRI_OFFSET 16			/*Output queue decision priority assign for NAPT Based Priority*/
+
+#define PSCR (SWCORE_BASE + 0x4800)
+
+#define WFQRCRP0 (0x0B0 + PSCR)			 /* Weighted Fair Queue Rate Control Register of Port 0 */
+
+#define ELBPCR (0x104 + PSCR)			 /* Leaky Bucket Parameter Control Register */
+
+#define ELBTTCR (0x108 + PSCR)			 /* Leaky Bucket Token Threshold Control Register */
+
+#define ILBPCR1 (0x10C + PSCR)			 /* Ingress Leaky Bucket Parameter Control Register1 */
+
+#define ILBPCR2 (0x110 + PSCR)			 /* Ingress Leaky Bucket Parameter Control Register2 */
+
+#define ILB_CURRENT_TOKEN (0x114 + PSCR) /* The current token of the Leaky bucket 2Bytes per port(Port 0~Port5) */
+
+#define APR_OFFSET (0)		   /* Average Packet Rate, in times of 64Kbps  CNT1 */
+
+#define APR_MASK (0x3FFF << 0) /* Average Packet Rate, in times of 64Kbps  CNT1 */
+
+#define Token_OFFSET (8)	   /* Token used for adding budget in each time slot. */
+
+#define Token_MASK (0xff << 8) /* Token used for adding budget in each time slot. */
+
+#define Tick_OFFSET (0)		   /* Tick used for time slot size unit */
+
+#define Tick_MASK (0xff << 0)  /* Tick used for time slot size unit */
+
+#define L2_OFFSET (0) /* leaky Bucket Token Hi-threshold register */
+
+#define UpperBound_OFFSET (16)		   /* Ingress BWC Parameter Upper bound Threshold (unit: 400bytes) */
+
+#define LowerBound_OFFSET (0)		   /* Ingress BWC Parameter Lower Bound Threshold (unit: 400 bytes) */
+
+#define ILB_feedToken_OFFSET (8)	   /* Token is used for adding budget in each time slot */
+
+#define ILB_feedToken_MASK (0xff << 8) /* Token is used for adding budget in each time slot */
+
+#define ILB_Tick_OFFSET (0)			   /* Tick is used for time slot size unit. */
+
+#define ILB_Tick_MASK (0xff << 0)	   /* Tick is used for time slot size unit. */
+
+#define VCR0 (0x00 + 0x4A00 + SWCORE_BASE)	  /* Vlan Control register*/
+
+#define PBVCR0 (0x1C + 0x4A00 + SWCORE_BASE)  /* Protocol-Based VLAN Control Register 0      */
+
+#define EnVlanInF_MASK (0x1ff << 0)					   /* Enable Vlan Ingress Filtering */
+
+#define EN_ALL_PORT_VLAN_INGRESS_FILTER EnVlanInF_MASK /* Alias Name */
+
+#define RTL8651_PORTSTA_DISABLED 0x00
+
+#define RTL8651_PORTSTA_BLOCKING 0x01
+
+#define RTL8651_PORTSTA_LISTENING 0x02
+
+#define RTL8651_PORTSTA_LEARNING 0x03
+
+#define RTL8651_PORTSTA_FORWARDING 0x04
+
+#define RTL8651_BC_FULL 0x00
+
+#define LEDCREG (SWCORE_BASE + 0x4300) /* LED control */
+
+#define BW_FULL_RATE 0
+
+#define BW_128K 1
+
+#define BW_256K 2
+
+#define BW_512K 3
+
+#define BW_1M 4
+
+#define BW_2M 5
+
+#define BW_4M 6
+
+#define BW_8M 7
+
+#define ALLOW_L2_CHKSUM_ERR (1 << 0)	/* Allow L2 checksum error */
+
+#define ALLOW_L3_CHKSUM_ERR (1 << 1)	/* Allow L3 checksum error */
+
+#define ALLOW_L4_CHKSUM_ERR (1 << 2)	/* Allow L4 checksum error */
+
+#define EN_ETHER_L3_CHKSUM_REC (1 << 3) /* Enable L3 checksum recalculation*/
+
+#define EN_ETHER_L4_CHKSUM_REC (1 << 4) /* Enable L4 checksum recalculation*/
+
+#define PIN_MUX_SEL 0xb8000040
+
+#define PIN_MUX_SEL2 0xb8000044
+
+#define HW_STRAP (SYSTEM_BASE + 0x0008)
+
 
 static uint8 fidHashTable[] = {0x00, 0x0f, 0xf0, 0xff};
 

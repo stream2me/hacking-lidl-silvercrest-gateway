@@ -8,9 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0
  */
-#include "rtl_types.h"
-#include "rtl_glue.h"
-#include "rtl_errno.h"
+#include "rtl819x.h"
 #include "rtl865x_eventMgr.h"
 
 /*record the allocated memory pool pointer, 
@@ -352,7 +350,6 @@ int32 rtl865x_raiseEvent(int32 eventId,void *actionParam)
 	
 	return SUCCESS;
 }
-
 
 
 

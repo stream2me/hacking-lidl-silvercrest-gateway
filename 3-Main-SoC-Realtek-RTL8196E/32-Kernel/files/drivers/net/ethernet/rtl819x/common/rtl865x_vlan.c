@@ -8,9 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0
  */
-#include "rtl_types.h"
-#include "rtl_glue.h"
-#include "rtl_errno.h"
+#include "rtl819x.h"
 #include "rtl865x_vlan.h"
 #include "../AsicDriver/rtl865x_asicCom.h"
 #include "rtl865x_eventMgr.h"
@@ -522,4 +520,3 @@ int32 rtl865x_reinitVlantable(void)
 	}
 	return SUCCESS;
 }
-
