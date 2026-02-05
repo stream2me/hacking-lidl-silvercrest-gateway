@@ -49,7 +49,7 @@ set_defaults() {
 
 ensure_env() {
   mkdir -p "$CONFIG_DIR" "$STATE_DIR"
-  if [ ! -f "$ENV_FILE" ]; then
+  if [ ! -s "$ENV_FILE" ]; then
     cat >"$ENV_FILE" <<EOF
 # rcp-stack configuration
 #
