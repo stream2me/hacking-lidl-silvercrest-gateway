@@ -1,5 +1,5 @@
 #!/bin/bash
-# build_bootloader.sh — Build the RTL8196E bootloader from src/
+# build_bootloader.sh — Build the RTL8196E bootloader
 #
 # Original bootloader sources and build flow:
 #   Copyright (C) Realtek Semiconductor Corp.
@@ -8,16 +8,29 @@
 #   J. Nilo - November 2025
 #
 # Uses the Lexra/musl toolchain from the project x-tools directory.
+#
+# Three variants are built:
+#   - noreboot: boot code TFTP flash does NOT auto-reboot (safe default)
+#   - reboot:   boot code TFTP flash auto-reboots after completion
+#   - ramtest:  RAM-test image with read-back verification of BSS clears
+#
+# Outputs:
+#   boot_noreboot.bin          - flash image, no reboot after boot-code TFTP
+#   boot_reboot.bin            - flash image, auto-reboot after boot-code TFTP
+#   btcode/build/test.bin      - RAM-loadable image for RAM testing
+#
 # Usage:
-#   ./build_bootloader.sh
+#   ./build_bootloader.sh          # build all variants
+#   ./build_bootloader.sh clean    # clean all build outputs
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Project root is 2 levels up: 31-Bootloader -> 3-Main-SoC -> project root
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-BOOTLOADER_DIR="${SCRIPT_DIR}/src"
-OUT_DIR="${SCRIPT_DIR}/out"
+
+JUMP_ADDR="${JUMP_ADDR:-0x80500000}"
+CROSS_PREFIX="mips-lexra-linux-musl-"
 
 # Toolchain - check project root first, then walk up the repo tree
 find_toolchain() {
@@ -39,32 +52,13 @@ find_toolchain() {
 }
 
 TOOLCHAIN_DIR="$(find_toolchain || true)"
-CROSS_PREFIX="mips-lexra-linux-musl-"
 
 if [ -n "$TOOLCHAIN_DIR" ]; then
     export PATH="${TOOLCHAIN_DIR}/bin:$PATH"
 fi
-export CROSS_COMPILE="${CROSS_PREFIX}"
+export CROSS="${CROSS_PREFIX}"
 
-# Realtek tools (lzma/cvimg) from build environment
-REALTEK_TOOLS_DIR="${PROJECT_ROOT}/1-Build-Environment/11-realtek-tools/bin"
-if [ -x "${REALTEK_TOOLS_DIR}/lzma" ]; then
-    export LZMA_TOOL="${REALTEK_TOOLS_DIR}/lzma"
-fi
-if [ -x "${REALTEK_TOOLS_DIR}/cvimg" ]; then
-    export CVIMG_TOOL="${REALTEK_TOOLS_DIR}/cvimg"
-fi
-
-echo "========================================="
-echo "  BUILDING RTL8196E BOOTLOADER"
-echo "========================================="
-echo ""
-
-# Checks
-if [ ! -d "$BOOTLOADER_DIR" ]; then
-    echo "Bootloader sources not found at $BOOTLOADER_DIR"
-    exit 1
-fi
+# --- Checks ----------------------------------------------------------------
 
 if [ -z "$TOOLCHAIN_DIR" ]; then
     echo "Toolchain not found in parent directories (expected x-tools/mips-lexra-linux-musl)"
@@ -80,43 +74,68 @@ if ! command -v "${CROSS_PREFIX}gcc" >/dev/null 2>&1; then
     exit 1
 fi
 
+# --- Clean target -----------------------------------------------------------
+
+do_clean() {
+    echo "Cleaning all build outputs..."
+    make -C "$SCRIPT_DIR/boot"   CROSS="$CROSS_PREFIX" clean 2>/dev/null || true
+    make -C "$SCRIPT_DIR/btcode" CROSS="$CROSS_PREFIX" clean 2>/dev/null || true
+    rm -f "$SCRIPT_DIR/boot_noreboot.bin" "$SCRIPT_DIR/boot_reboot.bin"
+    echo "Done."
+}
+
+if [ "${1:-}" = "clean" ]; then
+    do_clean
+    exit 0
+fi
+
+# --- Build ------------------------------------------------------------------
+
+echo "========================================="
+echo "  BUILDING RTL8196E BOOTLOADER"
+echo "========================================="
+echo ""
 echo "Toolchain: $TOOLCHAIN_DIR"
 echo "Compiler:  $(${CROSS_PREFIX}gcc --version | head -1)"
+echo "Jump addr: $JUMP_ADDR"
 echo ""
 
-mkdir -p "$OUT_DIR"
+# boot/ must be cleaned between variants because the Makefiles do not
+# track CFLAGS changes.
 
-pushd "$BOOTLOADER_DIR" >/dev/null
+# --- noreboot variant ---
+echo "--- Building noreboot variant ---"
+make -C "$SCRIPT_DIR/boot" CROSS="$CROSS_PREFIX" clean
+make -C "$SCRIPT_DIR/boot" CROSS="$CROSS_PREFIX" boot JUMP_ADDR="$JUMP_ADDR"
+make -C "$SCRIPT_DIR/btcode" CROSS="$CROSS_PREFIX" clean
+make -C "$SCRIPT_DIR/btcode" CROSS="$CROSS_PREFIX"
+cp -f "$SCRIPT_DIR/btcode/build/boot.bin" "$SCRIPT_DIR/boot_noreboot.bin"
 
-echo "Cleaning previous build..."
-make -C boot CROSS="${CROSS_PREFIX}" clean >/dev/null 2>&1 || true
-make -C btcode CROSS="${CROSS_PREFIX}" clean >/dev/null 2>&1 || true
-
-echo "Building bootloader..."
-make -C boot CROSS="${CROSS_PREFIX}" RTL865X=1 JUMP_ADDR=0x80500000 boot
-make -C btcode CROSS="${CROSS_PREFIX}" RTL865X=1
-
+# --- reboot variant (only boot/ changes; btcode sees new boot.out) ---
 echo ""
-echo "Collecting artifacts..."
-if [ -f boot/Output/boot.img ]; then
-    cp -f boot/Output/boot.img "$OUT_DIR/boot.img"
-fi
-if [ -f boot/Output/boot.bin ]; then
-    cp -f boot/Output/boot.bin "$OUT_DIR/boot.bin"
-fi
-if [ -f btcode/boot.bin ]; then
-    cp -f btcode/boot.bin "$OUT_DIR/boot.bin"
-fi
-if [ -f boot/Output/wboot.img ]; then
-    cp -f boot/Output/wboot.img "$OUT_DIR/wboot.img"
-fi
+echo "--- Building reboot variant ---"
+make -C "$SCRIPT_DIR/boot" CROSS="$CROSS_PREFIX" clean
+make -C "$SCRIPT_DIR/boot" CROSS="$CROSS_PREFIX" boot JUMP_ADDR="$JUMP_ADDR" BOOT_REBOOT=1
+make -C "$SCRIPT_DIR/btcode" CROSS="$CROSS_PREFIX"
+cp -f "$SCRIPT_DIR/btcode/build/boot.bin" "$SCRIPT_DIR/boot_reboot.bin"
 
-popd >/dev/null
+# --- ramtest variant (btcode CFLAGS change -> clean btcode too) ---
+echo ""
+echo "--- Building ramtest variant ---"
+make -C "$SCRIPT_DIR/boot" CROSS="$CROSS_PREFIX" clean
+make -C "$SCRIPT_DIR/boot" CROSS="$CROSS_PREFIX" boot JUMP_ADDR="$JUMP_ADDR" RAMTEST_TRACE=1
+make -C "$SCRIPT_DIR/btcode" CROSS="$CROSS_PREFIX" clean
+make -C "$SCRIPT_DIR/btcode" CROSS="$CROSS_PREFIX" RAMTEST_TRACE=1
+
+# --- Summary ----------------------------------------------------------------
 
 echo ""
 echo "========================================="
 echo "  BUILD SUMMARY"
 echo "========================================="
-ls -lh "$OUT_DIR"
 echo ""
-echo "Bootloader images ready in $OUT_DIR"
+[ -f "$SCRIPT_DIR/boot_noreboot.bin" ]      && ls -lh "$SCRIPT_DIR/boot_noreboot.bin"
+[ -f "$SCRIPT_DIR/boot_reboot.bin" ]        && ls -lh "$SCRIPT_DIR/boot_reboot.bin"
+[ -f "$SCRIPT_DIR/btcode/build/test.bin" ]  && ls -lh "$SCRIPT_DIR/btcode/build/test.bin"
+echo ""
+echo "Done."

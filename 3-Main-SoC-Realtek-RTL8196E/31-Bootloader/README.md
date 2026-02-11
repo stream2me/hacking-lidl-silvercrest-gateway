@@ -1,13 +1,8 @@
 # Realtek Bootloader
 
-> **WARNING: WORK IN PROGRESS - DO NOT FLASH**
->
-> This bootloader is under development and **does not work yet**.
-> Flashing it will **brick your device** and require hardware recovery (JTAG/SPI).
->
-> This directory is provided for documentation and development purposes only.
+Custom bootloader for the RTL8196E gateway, stored in the first 128 KB of flash memory.
 
-The RTL8196E gateway uses a proprietary Realtek bootloader stored in the first 128 KB of flash memory.
+Simplified and rewritten for the Lexra/musl cross-toolchain (x-tools). See `doc/MEMO_BOOTLOADER.md` for detailed technical notes.
 
 ## Overview
 
@@ -19,6 +14,24 @@ The RTL8196E gateway uses a proprietary Realtek bootloader stored in the first 1
 | Prompt | `<RealTek>` |
 | TFTP server IP | 192.168.1.6 (default) |
 
+## Building
+
+```bash
+./build_bootloader.sh          # build all variants
+./build_bootloader.sh clean    # clean
+```
+
+Outputs:
+- `boot_noreboot.bin` — flash image, no reboot after boot-code TFTP (safe default)
+- `boot_reboot.bin` — flash image, auto-reboot after boot-code TFTP
+- `btcode/build/test.bin` — RAM-test image
+
+## Flashing
+
+```bash
+./flash_bootloader.sh [IP]     # flash boot_reboot.bin via TFTP
+```
+
 ## Entering the Bootloader
 
 1. Connect serial adapter (38400 8N1)
@@ -26,8 +39,10 @@ The RTL8196E gateway uses a proprietary Realtek bootloader stored in the first 1
 3. Press **ESC** repeatedly until the `<RealTek>` prompt appears
 
 ```
----RealTek(RTL8196E)at 2020.08.05-10:15+0800 version v1.5 [16bit](390MHz)
-...
+Realtek RTL8196E  CPU: 400MHz  RAM: 32MB  Flash: GD25Q128
+Bootloader: V2.2 - 2026.02.10-18:30+0100 - J. Nilo
+---Escape booting by user
+---Ethernet init Okay!
 <RealTek>
 ```
 
@@ -282,7 +297,7 @@ Simply send images with Realtek headers — the bootloader handles placement:
 
 ```bash
 tftp -m binary 192.168.1.6 -c put rootfs.bin
-tftp -m binary 192.168.1.6 -c put kernel.img  # triggers reboot
+tftp -m binary 192.168.1.6 -c put boot_reboot.bin  # triggers reboot
 ```
 
 ### Boot manually
@@ -301,3 +316,4 @@ The bootloader IP can be modified in its configuration area. This is an advanced
 - The bootloader is the only way to recover a bricked device (without desoldering the flash chip)
 - Always verify TFTP transfers completed successfully before rebooting
 - Kernel flash triggers automatic reboot — flash rootfs/userdata first
+- Use `boot_noreboot.bin` when testing — it stays in download mode after boot-code TFTP
