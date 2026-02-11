@@ -255,9 +255,6 @@ void loader_main(unsigned long reg_a0, unsigned long reg_a1,
 			      unsigned long);
 	int res;
 
-	/* Display boot banner (UART already initialized by bootloader) */
-	printf("\n\nLZMA Kernel Loader for Realtek RTL819X\n");
-
 	/* Initialize compressed data pointers */
 	lzma_init_data();
 
@@ -268,7 +265,7 @@ void loader_main(unsigned long reg_a0, unsigned long reg_a1,
 		halt();
 	}
 
-	printf("Decompressing kernel (%lu bytes compressed -> %lu bytes)... ",
+	printf("\n\nDecompressing kernel (%lu bytes compressed -> %lu bytes)... ",
 	       lzma_datasize, lzma_outsize);
 
 	/* Decompress kernel to memory */
@@ -291,7 +288,7 @@ void loader_main(unsigned long reg_a0, unsigned long reg_a1,
 	/* Ensure decompressed kernel is visible to CPU (flush caches) */
 	flush_cache(kernel_la, lzma_outsize);
 
-	printf("Transferring control to kernel at 0x%08x...\n\n", (unsigned int)kernel_la);
+	printf("Transferring control to kernel at 0x%08x...\n", (unsigned int)kernel_la);
 
 	/* Setup kernel arguments (if configured) */
 #ifdef CONFIG_KERNEL_CMDLINE
