@@ -1,1 +1,3 @@
 linux-5.10.246-rtl8196e/
+kbuild_dbg.sh
+extract_patches.sh
