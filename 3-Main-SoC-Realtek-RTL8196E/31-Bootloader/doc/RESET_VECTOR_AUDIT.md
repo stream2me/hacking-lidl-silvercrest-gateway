@@ -1,6 +1,6 @@
 # Reset Vector / DDR Init Audit (RTL8196E)
 
-Scope: `btcode/start.S` and `btcode/start.h` in `bootcode_rtl8196d_claude`.
+Scope: `btcode/start.S` and `btcode/start.h`.
 This is **stage‑1** code that runs from the reset vector in SPI flash and
 prepares DDR + UART, flushes caches, copies the stage‑1.5 payload into RAM,
 and jumps to it.

@@ -27,6 +27,7 @@ Display memory contents as a hex byte dump.
 
 ```
 <RealTek>DB 80000000 64
+ [Addr]   .0 .1 .2 .3 .4 .5 .6 .7 .8 .9 .A .B .C .D .E .F
 80000000: 08 04 00 14 00 00 00 00 B8 00 10 08 FF FF 05 C0    ................
 80000010: B8 00 10 04 54 48 00 00 B8 00 10 50 D2 80 00 00    ....TH.....P....
 80000020: B8 00 00 10 01 7F FD 2E B8 00 00 10 01 7F FD 2E    ................
@@ -236,7 +237,7 @@ Write data from RAM to SPI flash.  Prompts for confirmation.
 
 ```
 <RealTek>FLW 0 80500000 5600
-Write 0x5600 Bytes to SPI flash#1, offset 0x0<0xbd000000>, from RAM 0x80500000 to 0x80505600
+Write 0x5600 Bytes to SPI flash, offset 0x0<0xbd000000>, from RAM 0x80500000 to 0x80505600
 (Y)es, (N)o->Y
 ```
 
@@ -429,6 +430,6 @@ tftp -m binary 192.168.1.6 -c get flash_dump.bin
 <RealTek>LOADADDR 80500000
 <RealTek>                          (upload raw data via TFTP)
 <RealTek>FLW 10000 80500000 5000
-Write 0x5000 Bytes to SPI flash#1, offset 0x10000<0xbd010000>, from RAM 0x80500000 to 0x80505000
+Write 0x5000 Bytes to SPI flash, offset 0x10000<0xbd010000>, from RAM 0x80500000 to 0x80505000
 (Y)es, (N)o->Y
 ```
