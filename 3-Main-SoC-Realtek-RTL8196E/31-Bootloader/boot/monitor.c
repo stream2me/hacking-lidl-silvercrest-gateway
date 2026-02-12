@@ -618,10 +618,9 @@ int YesOrNo(void)
 
 int CmdSFlw(int argc, char *argv[])
 {
-	if (!require_args(argc, 4, "FLW <dst> <src> <length> <spi#>"))
+	if (!require_args(argc, 3, "FLW <dst> <src> <length>"))
 		return 1;
 
-	unsigned long cnt2 = 0;
 	unsigned long dst_flash_addr_offset = 0;
 	unsigned long src_RAM_addr = 0;
 	unsigned long length = 0;
@@ -632,13 +631,11 @@ int CmdSFlw(int argc, char *argv[])
 		return 1;
 	if (!parse_hex_arg(argv[2], &length, "Length"))
 		return 1;
-	if (!parse_hex_arg(argv[3], &cnt2, "SPI"))
-		return 1;
 
 	unsigned int end_of_RAM_addr = src_RAM_addr + length;
-	printf("Write 0x%x Bytes to SPI flash#%d, offset 0x%x<0x%x>, from RAM "
+	printf("Write 0x%x Bytes to SPI flash, offset 0x%x<0x%x>, from RAM "
 	       "0x%x to 0x%x\n",
-	       (unsigned int)length, (unsigned int)cnt2 + 1,
+	       (unsigned int)length,
 	       (unsigned int)dst_flash_addr_offset,
 	       (unsigned int)dst_flash_addr_offset + 0xbd000000,
 	       (unsigned int)src_RAM_addr,
@@ -646,7 +643,7 @@ int CmdSFlw(int argc, char *argv[])
 	printf("(Y)es, (N)o->");
 	if (YesOrNo()) {
 		spi_pio_init();
-		spi_flw_image_mio_8198((unsigned int)cnt2,
+		spi_flw_image_mio_8198(0,
 				       (unsigned int)dst_flash_addr_offset,
 				       (unsigned char *)src_RAM_addr, length);
 	} // end if YES
