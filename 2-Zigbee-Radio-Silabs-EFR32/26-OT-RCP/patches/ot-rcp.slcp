@@ -41,9 +41,9 @@ configuration:
     value: 115200
   - name: OPENTHREAD_CONFIG_HEAP_EXTERNAL_ENABLE
     value: 0
-  # Hardware flow control
+  # Hardware flow control (GPIO-managed, compatible with serialgateway CRTSCTS)
   - name: SL_UARTDRV_USART_VCOM_FLOW_CONTROL_TYPE
-    value: uartdrvFlowControlHwUart
+    value: uartdrvFlowControlHw
     condition: [uartdrv_usart]
 
 tag:
