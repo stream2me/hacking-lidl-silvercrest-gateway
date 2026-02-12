@@ -73,3 +73,6 @@ system.map
 3-Main-SoC-Realtek-RTL8196E/34-Userdata/skeleton/usr/bin/nano
 3-Main-SoC-Realtek-RTL8196E/34-Userdata/skeleton/usr/bin/serialgateway
 3-Main-SoC-Realtek-RTL8196E/34-Userdata/serialgateway/src/serialgateway
+
+# packages
+packages/
