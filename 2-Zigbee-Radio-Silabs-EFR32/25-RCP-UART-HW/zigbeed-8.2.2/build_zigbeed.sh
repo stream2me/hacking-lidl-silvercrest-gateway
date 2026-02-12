@@ -14,10 +14,31 @@
 #
 # J. Nilo - January 2026
 
+prepare_deb_files() {
+    echo "Creating build helper scripts..."
+    # Debian Maintainer Scripts
+    cat << 'EOF' > preinst
+#!/bin/sh
+set -e
+echo "Stopping zigbeed if running..."
+pkill -f zigbeed || true
+EOF
+
+    cat << 'EOF' > prerm
+#!/bin/sh
+set -e
+echo "Stopping zigbeed before removal..."
+pkill -f zigbeed || true
+EOF
+
+    chmod +x preinst prerm
+}
+
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
+CPC_DIR="${SCRIPT_DIR}/../cpcd/cpc-daemon"
 
 # Project paths
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
@@ -70,9 +91,9 @@ if ! command -v slc >/dev/null 2>&1; then
 fi
 
 # Check libcpc
-if ! ldconfig -p 2>/dev/null | grep -q libcpc; then
+if [ ! -s "${CPC_DIR}/build/libcpc.a" ]; then
     echo "WARNING: libcpc not found. Build cpcd first:"
-    echo "  cd ../cpcd && ./build_cpcd.sh"
+    ../cpcd/build_cpcd.sh
 fi
 
 # =========================================
@@ -140,17 +161,59 @@ ln -s "${SIMPLICITY_SDK}" simplicity_sdk_2025.6.2
 echo ""
 echo "[2/2] Building..."
 
-make -f zigbeed.Makefile -j$(nproc)
+echo "Patching zigbeed.project.mak..."
+sed -i "/platform\/service\/cpc\/daemon\/lib/a \  -I${CPC_DIR}/lib \\\\" zigbeed.project.mak
+sed -i "/-lcpc/i \  -L${CPC_DIR}/build \\\\" zigbeed.project.mak
+
+make -sf zigbeed.Makefile -j$(nproc)
 
 # =========================================
 # Strip and install
 # =========================================
 echo ""
-echo "Stripping and installing to /usr/local/bin..."
+echo "Stripping and installing to /usr/bin..."
 
 strip build/debug/zigbeed
-sudo cp build/debug/zigbeed /usr/local/bin/
-sudo chmod +x /usr/local/bin/zigbeed
+
+# Install
+read -p "Install zigbeed local or build DEB-File? ((l)ocal/(d)eb): " answer
+
+case ${answer:0:1} in
+    l|L )
+        echo "Installing locally..."
+        sudo cp build/debug/zigbeed /usr/bin/
+        sudo chmod +x /usr/bin/zigbeed
+        echo "Done."
+        ;;
+    d|D )
+        echo "Generating DEB-Package..."
+        APP_NAME="zigbeed"
+        VERSION="1.0.0"
+        DEPLOY_DIR="${BUILD_DIR}/tmp"
+
+        install -D build/debug/zigbeed ${DEPLOY_DIR}/usr/bin/zigbeed
+
+        prepare_deb_files
+        cpack -G DEB \
+          -D CPACK_GENERATOR="DEB" \
+          -D CPACK_DEBIAN_PACKAGE_ARCHITECTURE="$ARCH" \
+          -D CPACK_PACKAGE_NAME="$APP_NAME" \
+          -D CPACK_PACKAGE_VERSION="$VERSION" \
+          -D CPACK_PACKAGE_FILE_NAME="${APP_NAME}-${VERSION}-${ARCH}" \
+          -D CPACK_PACKAGE_DESCRIPTION="zigbeed" \
+          -D CPACK_DEBIAN_PACKAGE_MAINTAINER=$(git remote get-url origin | sed -E 's/.*[:\/](.*)\/.*\..*/\1/') \
+          -D CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA="preinst;prerm" \
+          -D CPACK_OUTPUT_FILE_PREFIX="${SCRIPT_DIR}/packages" \
+          -D CPACK_INSTALLED_DIRECTORIES="${DEPLOY_DIR};/" \
+
+        rm -r ${DEPLOY_DIR}
+        echo "Done."
+        echo "use dpkg -i zigbeed.deb to install"
+       ;;
+    * )
+        echo "Installation canceled."
+        ;;
+esac
 
 echo ""
 echo "========================================="
