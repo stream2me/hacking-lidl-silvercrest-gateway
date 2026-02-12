@@ -107,9 +107,9 @@ COMMAND_TABLE MainCmdTable[] = {
     {"LOADADDR", 1, CmdLoad, "LOADADDR: <Load Address>"},
     {"J", 1, CmdCfn, "J: Jump to <TargetAddress>"},
     {"FLR", 3, CmdFlr, "FLR: FLR <dst><src><length>"},
-    {"FLW", 4, CmdSFlw,
-     "FLW <dst_ROM_offset><src_RAM_addr><length_Byte> <SPI cnt#>: Write "
-     "offset-data to SPI from RAM"},				// JSW
+    {"FLW", 3, CmdSFlw,
+     "FLW <dst_ROM_offset> <src_RAM_addr> <length_Byte>: Write "
+     "offset-data to SPI from RAM"},
     {"MDIOR", 0, TestCmd_MDIOR, "MDIOR:  MDIOR <phyid> <reg>"}, // wei add,
     {"MDIOW", 0, TestCmd_MDIOW,
      "MDIOW:  MDIOW <phyid> <reg> <data>"}, // wei add,

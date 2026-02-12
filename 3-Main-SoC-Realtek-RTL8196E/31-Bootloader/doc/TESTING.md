@@ -215,7 +215,7 @@ level.
 
 | Command | Test | Expected |
 |---------|------|----------|
-| `?` | `?` | Help text with all 16 commands |
+| `?` | `?` | Help text listing all commands |
 | `DB` | `DB 80000000 64` | Hex byte dump, 4 lines |
 | `DW` | `DW B8000000 4` | Word dump, 4 lines of 4 words |
 | `CMP` | `CMP 80000000 80000000 100` | `No error found` |
