@@ -34,6 +34,20 @@ load_env() {
   fi
 }
 
+open_editor() {
+    local file="$1"
+    if [ -n "${EDITOR:-}" ]; then
+        $EDITOR "$file"
+    elif command -v nano >/dev/null 2>&1; then
+        nano "$file"
+    elif command -v vi >/dev/null 2>&1; then
+        vi "$file"
+    else
+        log "No editor found"
+        return 1
+    fi
+}
+
 set_defaults() {
   CPC_INSTANCE_NAME="${CPC_INSTANCE_NAME:-cpcd_bringup}"
   CPC_SOCKET_DIR="${CPC_SOCKET_DIR:-/dev/shm/cpcd/$CPC_INSTANCE_NAME}"
@@ -79,7 +93,18 @@ ensure_env() {
 # READY_TIMEOUT=20
 # READY_POLL_INTERVAL=0.2
 EOF
-    die "Created $ENV_FILE. Edit it with your paths, then rerun."
+    echo "The configuration file '$ENV_FILE' was created."
+    read -p "Would you like to edit it now? (y/n): " choice
+    case "$choice" in
+            [yY][eE][sS]|[yY])
+                if ! open_editor "$ENV_FILE"; then
+                    die "Failed to open editor. Please edit $ENV_FILE manually, then rerun."
+                fi
+                ;;
+            *)
+                die "Created $ENV_FILE. Edit it with your paths, then rerun."
+                ;;
+        esac
   fi
 }
 
