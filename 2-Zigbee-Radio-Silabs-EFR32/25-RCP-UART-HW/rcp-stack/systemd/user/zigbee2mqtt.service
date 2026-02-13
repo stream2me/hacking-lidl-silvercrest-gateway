@@ -13,7 +13,6 @@ ExecStartPre=%h/.config/rcp-stack/bin/rcp-wait-pty /tmp/ttyZ2M
 ExecStartPre=%h/.config/rcp-stack/bin/rcp-wait-active zigbeed.service
 ExecStartPre=%h/.config/rcp-stack/bin/rcp-check-command Z2M_COMMAND
 ExecStart=%h/.config/rcp-stack/bin/rcp-run-command Z2M_COMMAND
-ExecStopPost=%h/.config/rcp-stack/bin/rcp-cleanup --symlink /tmp/ttyZ2M
 Restart=on-failure
 RestartSec=5s
 

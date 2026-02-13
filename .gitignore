@@ -25,6 +25,7 @@ Output/
 # Toolchains and external tools
 x-tools/
 silabs-tools/
+SimplicityStudio/
 1-Build-Environment/11-realtek-tools/bin/
 1-Build-Environment/11-realtek-tools/mtd-utils/
 
@@ -53,6 +54,9 @@ ncursesw-install/
 # Generated config files
 autoconf2.h
 .*.flags
+.config/
+.silabs/
+.uc/
 
 # Linker/debug files
 *.elf.txt
@@ -71,3 +75,6 @@ system.map
 3-Main-SoC-Realtek-RTL8196E/34-Userdata/skeleton/usr/bin/nano
 3-Main-SoC-Realtek-RTL8196E/34-Userdata/skeleton/usr/bin/serialgateway
 3-Main-SoC-Realtek-RTL8196E/34-Userdata/serialgateway/src/serialgateway
+
+# packages
+packages/

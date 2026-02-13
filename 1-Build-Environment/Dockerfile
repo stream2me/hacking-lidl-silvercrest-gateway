@@ -84,6 +84,11 @@ RUN dpkg --add-architecture i386 && \
         openjdk-21-jre-headless \
         # Commander dependencies
         libgl1 \
+        # cpcd build
+        cmake \
+        gcc \
+        g++ \
+        libmbedtls-dev
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
